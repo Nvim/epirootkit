@@ -1,0 +1,3 @@
+- multi-file rootkit that builds
+- rootkit hooks syscalls on startup to hide itself
+- rootkit checks for persitence and sets it up if not found
