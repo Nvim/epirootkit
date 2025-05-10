@@ -1,7 +1,7 @@
 KERNELDIR = /lib/modules/$(shell uname -r)/build
 PWD = $(shell pwd)
 obj-m = rootkit.o
-rootkit-objs = main.o network.o exec.o
+rootkit-objs = main.o network.o exec.o hook.o
 
 modules:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) $@
