@@ -1,3 +1,6 @@
+#include "network.h"
+
+#include <linux/delay.h>
 #include <linux/inet.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -21,7 +24,7 @@ int network_init(const char *ip, int port)
     unsigned char ip_binary[4] = { 0 };
     int ret = 0;
 
-    pr_info("network: initializing module\n");
+    pr_info("network: initializing socket\n");
 
     if ((ret = in4_pton(ip, -1, ip_binary, -1, NULL)) == 0)
     {
@@ -54,6 +57,7 @@ int network_init(const char *ip, int port)
     {
         pr_err("network: error sending the message: %d\n", ret);
         sock_release(sock);
+        sock = NULL;
         return 1;
     }
 
@@ -71,6 +75,7 @@ int network_loop(void *data)
     struct msghdr status_msg = { 0 };
     char status_buf[15];
     int status = 0;
+    struct config *cfg = data;
 
     // handle response:
     while (kthread_should_stop() == 0)
@@ -78,12 +83,37 @@ int network_loop(void *data)
         resp_vec.iov_base = resp_buf;
         resp_vec.iov_len = 1023;
 
-        // TODO: recvmsg is blocking and the thread won't stop until it returns:
-        if ((ret = kernel_recvmsg(sock, &resp_msg, &resp_vec, 1, 1023, 0)) <= 0)
+        if (!sock)
         {
-            pr_info("network: couldn't recv from socket: %d\n", ret);
-            return 1;
-            /* break; */
+            int r;
+            while ((r = network_init(cfg->ip, cfg->port)) != 0
+                   && kthread_should_stop() == 0)
+            {
+                pr_warn(
+                    "network: failed to init socket. trying again in 3s.\n");
+                msleep(3000);
+            }
+        }
+
+        if (kthread_should_stop() || !sock)
+        {
+            break;
+        }
+
+        ret = kernel_recvmsg(sock, &resp_msg, &resp_vec, 1, 1023, MSG_DONTWAIT);
+        if (ret == -EAGAIN || ret == -EWOULDBLOCK)
+        {
+            pr_info("network: no data available. polling again in 1s...\n");
+            msleep(1000);
+            continue;
+        }
+        if (ret < 0)
+        {
+            pr_info("network: socket error: %d. re-initializing socket.\n",
+                    ret);
+            sock_release(sock);
+            sock = NULL; // set sock to NULL to trigger calling init
+            continue;
         }
 
         // don't print newline
@@ -109,8 +139,9 @@ int network_loop(void *data)
                 < 0)
             {
                 pr_err("network: couldn't send exit status back: %d\n", ret);
-                return 1;
-                /* break; */
+                sock_release(sock);
+                sock = NULL;
+                continue;
             }
         }
         else

