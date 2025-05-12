@@ -32,4 +32,6 @@ int setup_hooks(void);
 // Unhook all the necessary functions:
 int clear_hooks(void);
 
+int toggle_hooks(void);
+
 #endif

