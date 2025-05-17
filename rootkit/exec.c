@@ -4,6 +4,9 @@
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
 
+static char out_file[256] = { 0 };
+static char err_file[256] = { 0 };
+
 static void get_first_word(const char *cmd, char *dst)
 {
     int i = 0;
@@ -12,12 +15,20 @@ static void get_first_word(const char *cmd, char *dst)
     memcpy(dst, cmd, i);
 }
 
+char *get_last_outfile(void)
+{
+    return out_file;
+}
+
+char *get_last_errfile(void)
+{
+    return err_file;
+}
+
 int exec_sync(const char *cmd_str, int *ret)
 {
     struct subprocess_info *sub_info = NULL;
     char cmd_first_word[256] = { 0 };
-    char out_file[256] = { 0 };
-    char err_file[256] = { 0 };
     char *cmd = NULL;
     char *envp[] = { "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
     char *argv[] = { "/bin/sh", "-c", NULL, NULL };
@@ -58,8 +69,4 @@ int exec_sync(const char *cmd_str, int *ret)
     pr_info("exec: done. status: %d", status);
 
     return 0;
-
-    // TODO: read files for stderr & stdout
-    // Should be done in another func, ran only when last cmd's output is
-    // requested
 }

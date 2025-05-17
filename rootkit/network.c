@@ -7,7 +7,6 @@
 #include <linux/net.h>
 
 #include "commands.h"
-#include "exec.h"
 
 static struct socket *sock = NULL;
 static char *message = "Hello World! from kernel land";
@@ -150,9 +149,11 @@ int network_loop(void *data)
                         "network: couldn't send status buffer back: %d\n", ret);
                 NET_ERROR(status_buf)
             }
+            memset(resp_buf, 0, sizeof(resp_buf));
             continue;
         }
 
+        memset(resp_buf, 0, sizeof(resp_buf));
         if ((ret = cmd.callback(sock, cmd.args) != 0))
         {
             if (ret != -1)

