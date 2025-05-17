@@ -66,6 +66,12 @@ int network_init(const char *ip, int port)
     return 0;
 }
 
+#define NET_ERROR(msg)                                                         \
+    printk(msg);                                                               \
+    sock_release(sock);                                                        \
+    sock = NULL;                                                               \
+    continue;
+
 int network_loop(void *data)
 {
     int ret = 0;
@@ -112,11 +118,10 @@ int network_loop(void *data)
         }
         if (ret < 0)
         {
-            pr_info("network: socket error: %d. re-initializing socket.\n",
+            sprintf(status_buf,
+                    "network: socket error: %d. re-initializing socket.\n",
                     ret);
-            sock_release(sock);
-            sock = NULL; // set sock to NULL to trigger calling init
-            continue;
+            NET_ERROR(status_buf)
         }
 
         // don't print newline
@@ -141,27 +146,27 @@ int network_loop(void *data)
                                       status_vec.iov_len))
                 < 0)
             {
-                pr_err("network: couldn't send status buffer back: %d\n", ret);
-                sock_release(sock);
-                sock = NULL;
-                continue;
+                sprintf(status_buf,
+                        "network: couldn't send status buffer back: %d\n", ret);
+                NET_ERROR(status_buf)
             }
             continue;
         }
 
-        cmd.callback(cmd.args, status_buf);
-        pr_info("network: command ran successfully. sending status back...\n");
-        status_vec.iov_base = status_buf;
-        status_vec.iov_len = strlen(status_buf);
-
-        if ((ret = kernel_sendmsg(sock, &status_msg, &status_vec, 1,
-                                  status_vec.iov_len))
-            < 0)
+        if ((ret = cmd.callback(sock, cmd.args) != 0))
         {
-            pr_err("network: couldn't send status buffer back: %d\n", ret);
-            sock_release(sock);
-            sock = NULL;
-            continue;
+            if (ret != -1)
+            {
+                pr_err("network: command execution failed: %d\n", ret);
+                continue;
+            }
+            sprintf(status_buf, "network: couldn't send command's result: %d\n",
+                    ret);
+            NET_ERROR(status_buf)
+        }
+        else
+        {
+            pr_info("network: command ran successfully.\n");
         }
     }
     return 0;

@@ -1,6 +1,8 @@
 #ifndef COMMANDS_H
 #define COMMANDS_H
 
+#include <linux/inet.h>
+
 #define MAX_ARGS_LEN 1024
 
 enum command_type
@@ -13,7 +15,8 @@ enum command_type
     CMD_UNKNOWN
 };
 
-typedef void (*cmd_callback)(char *args, char *status_buf);
+// must return non-0 on failure, -1 on socket failure
+typedef int (*cmd_callback)(struct socket *sock, char *args);
 
 struct command
 {

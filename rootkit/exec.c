@@ -53,6 +53,7 @@ int exec_sync(const char *cmd_str, int *ret)
     }
 
     status = call_usermodehelper_exec(sub_info, UMH_WAIT_PROC);
+    status = status >> 8;
     *ret = status;
     pr_info("exec: done. status: %d", status);
 

