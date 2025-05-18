@@ -9,4 +9,9 @@ run: build
 .PHONY: tidy
 tidy:
 	go mod tidy -v
-	go fmt ./...
+
+format:
+	gofumpt -w ./**/*.go
+
+lint:
+	golangci-lint run

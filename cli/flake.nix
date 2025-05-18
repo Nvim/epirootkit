@@ -24,6 +24,8 @@
           go
           gopls
           golangci-lint
+          gotools
+          gofumpt
           delve
         ];
       };
