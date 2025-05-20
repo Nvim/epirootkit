@@ -1,3 +1,62 @@
-- multi-file rootkit that builds
-- rootkit hooks syscalls on startup to hide itself
-- rootkit checks for persitence and sets it up if not found
+# Rootkit:
+
+- CheckPassword "endpoint" (no lock status, frontend will lock itself)
+- Cypher packets maybe
+- Handle file upload (touch new file, read sock until DONE)
+
+# CLI:
+
+## DOD:
+
+### RootModel
+
+App's main model should hold:
+- Init
+- Locked status
+- Server (has the socket handle & status)
+- Current tab in tabs list 
+- Loading status
+- Log buffer (ViewPort bubble)
+- Submodels
+
+Lock is on by default. Loading is global to prevent "sending" multiple requests
+too rootkit, while still handling user's input and allowing him to move between
+tabs.
+UI has header, tabbar submodel viewport on the left, loading, status & logs on
+the right, and footer.
+
+Init is fast but async for fullscreen apps, so use the Init flag to wait for 
+BubbleTea. Set it to false when recieving 1st windowsizeupdate
+
+Update should handle:
+- Global Keybinds
+- ConnectionStatusUpdate (dispatch listen job on disconnect)
+- Window resize (pass it to child as well)
+- Current submodel's update
+- Ping backend to check if conn is still alive (fire ConnectionStatusUpdate)
+
+### Submodels
+
+They are like my own bubbles. Their View is rendered in the viewport part on the
+right of main UI. They each correspond to one tab of the UI, thus their update
+method is only called when they are in focus.
+They all receive pointers to root's Loading, Server & Logs buffer(or bubble
+idk).
+
+UI bubbles used:
+- Exec: ViewPort + TextInput
+- Hide: Custom strings idk
+- Upload: FilePicker, List
+- Download: List, TextInput
+
+Update flow:
+- If disconnected, some string
+- If Loading, listen for the custom Msg fired by our command & prevent Enter
+- On our Msg: flip loading to false, append to global logs, update UI
+
+## Goodies:
+
+- Use Exec component to run CMatrix in background on static screens (lock/hide)
+- Try Progress Bar for file upload since we know file's size
+- Notifications
+- ASCII art on static pages where I've got space left (Hide/Lock Screen)
