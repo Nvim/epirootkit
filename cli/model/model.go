@@ -3,9 +3,13 @@ package model
 import (
 	"bufio"
 	"cli/server"
+	"cli/style"
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -38,24 +42,47 @@ func (c Tab) String() string {
 }
 
 type Model struct {
-	ctx        context.Context
-	server     *server.Server
-	cancelFn   context.CancelFunc
-	tabs       []Tab
-	cursor     Tab
-	currentTab Tab
+	ctx         context.Context
+	server      *server.Server
+	cancelFn    context.CancelFunc
+	execModel   *ExecModel
+	logs        *viewport.Model
+	spinner     *spinner.Model
+	tabs        []Tab
+	currentTab  Tab
+	locked      bool
+	isLoading   bool
+	initialized bool // true after BubbleTea loaded and gave us window size
+	width       int
+	heigth      int
+	childWidth  int
+	childHeight int
+}
+
+// will be given to each Tab, pointers to root model's fields
+type TabCfg struct {
+	srv       *server.Server
+	locked    *bool
+	isLoading *bool
+	logs      *viewport.Model
+	width     *int
+	height    *int
 }
 
 func NewModel(s *server.Server) Model {
+	// locked, loading := false, false
 	ctx, fn := context.WithCancel(context.Background())
-	return Model{
-		cursor:     Exec,
-		currentTab: Exec,
-		server:     s,
-		ctx:        ctx,
-		cancelFn:   fn,
-		tabs:       []Tab{Exec, Hide, Upload, Download},
+	m := Model{
+		currentTab:  Exec,
+		server:      s,
+		ctx:         ctx,
+		cancelFn:    fn,
+		locked:      false,
+		isLoading:   false,
+		tabs:        []Tab{Exec, Hide, Upload, Download},
+		initialized: false,
 	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -63,7 +90,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// var cmd tea.Cmd
+	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+
 	case ConnectionUpdateMsg:
 		m.server.ConnState = server.ConnectionStatus(msg)
 		if m.server.ConnState == server.Disconnected {
@@ -71,7 +101,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.listenAndAcceptCmd()
 		}
 
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.heigth = msg.Height
+		m.childWidth = int(style.ChildModelWidthRatio * float32(msg.Width))
+		m.childHeight = msg.Height - style.HeaderHeight
+
+		// Instanciate tab components with pointers to root's fields
+		if !m.initialized {
+			tabCfg := TabCfg{
+				srv:       m.server,
+				locked:    &m.locked,
+				isLoading: &m.isLoading,
+				logs:      m.logs,
+				width:     &m.childWidth,
+				height:    &m.childHeight,
+			}
+
+			execModel := NewExecModel(tabCfg)
+			m.execModel = &execModel
+
+			m.initialized = true
+		}
+
+	// Handle important key presses and dispatch to currently focused child
 	case tea.KeyMsg:
+
+		if !m.initialized {
+			return m, nil
+		}
 		switch msg.String() {
 
 		case "ctrl+c", "q":
@@ -83,49 +141,82 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelFn()
 			return m, tea.Quit
 
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+		case "shift+tab", "right":
+			if m.currentTab > 0 {
+				m.currentTab--
 			}
 
-		case "down", "j":
-			if m.cursor != Download {
-				m.cursor++
+		case "tab", "left":
+			if m.currentTab != Download {
+				m.currentTab++
 			}
 
-		case "enter":
-			m.currentTab = Tab(m.cursor)
+		default:
+			switch m.currentTab {
+			case Exec:
+				x, cmd := m.execModel.Update(msg)
+				if idk, ok := x.(ExecModel); ok {
+					m.execModel = &idk
+					cmds = append(cmds, cmd)
+				}
+				// case Hide:
+				// case Upload:
+				// case Download:
+			}
 		}
 	}
 
 	if m.server.ConnState == server.Connected {
-		return m, m.readSocketCmd()
+		cmds = append(cmds, m.readSocketCmd())
 	}
-	return m, nil
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
+	if !m.initialized {
+		return "Loading..."
+	}
 	s := fmt.Sprintf("Status: %s\n\n", m.server.ConnState.String())
-	s += "What do you want to do?\n"
+
+	row := strings.Builder{}
 
 	for _, choice := range m.tabs {
-		cursor := " "
-		if m.cursor == choice {
-			cursor = ">"
-		}
-
-		checked := " "
 		if choice == m.currentTab {
-			checked = "x"
+			row.WriteString(fmt.Sprintf("[%s]", choice.String()))
+		} else {
+			row.WriteString(fmt.Sprintf(" %s ", choice.String()))
 		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.String())
 	}
-	// The footer
+	row.WriteString("\n\n")
+	s += row.String()
+
+	if t, err := m.getCurrentChild(); err == nil {
+		s += t.View()
+	} else {
+		s += fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())
+	}
+	// s += m.execModel.View()
+
 	s += "\nPress q to quit.\n"
 
 	// Send the UI for rendering
 	return s
+}
+
+func (m Model) getCurrentChild() (tea.Model, error) {
+	if m.initialized {
+		switch m.currentTab {
+		case Exec:
+			return m.execModel, nil
+		case Hide:
+		case Upload:
+		case Download:
+		default:
+			return nil, fmt.Errorf("TODO")
+		}
+	}
+	return nil, fmt.Errorf("no init")
 }
 
 func (m Model) listenAndAcceptCmd() tea.Cmd {
