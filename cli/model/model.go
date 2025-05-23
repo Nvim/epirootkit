@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type (
@@ -177,31 +178,48 @@ func (m Model) View() string {
 	if !m.initialized {
 		return "Loading..."
 	}
-	s := fmt.Sprintf("Status: %s\n\n", m.server.ConnState.String())
+
+	tabw := m.childWidth / 4
+	selectedTabStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), true, true, false, true).
+		Width(tabw).
+		Height(2).
+		Padding(0, 2).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("#22AA55"))
+
+	normalTabStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		Padding(1, 2, 0, 2).
+		Inherit(selectedTabStyle)
 
 	row := strings.Builder{}
 
+	tabs := []string{}
 	for _, choice := range m.tabs {
 		if choice == m.currentTab {
-			row.WriteString(fmt.Sprintf("[%s]", choice.String()))
+			tabs = append(tabs, selectedTabStyle.Render(choice.String()))
 		} else {
-			row.WriteString(fmt.Sprintf(" %s ", choice.String()))
+			tabs = append(tabs, normalTabStyle.Render(choice.String()))
 		}
 	}
-	row.WriteString("\n\n")
-	s += row.String()
+
+	row.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, tabs...))
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).UnsetBorderTop().
+		Padding(2).
+		Width(tabw * 4).
+		Height(m.childHeight)
 
 	if t, err := m.getCurrentChild(); err == nil {
-		s += t.View()
+		row.WriteString(boxStyle.Render(t.View()))
 	} else {
-		s += fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())
+		row.WriteString(boxStyle.Render(fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())))
 	}
-	// s += m.execModel.View()
 
-	s += "\nPress q to quit.\n"
-
-	// Send the UI for rendering
-	return s
+	// s += "\nPress q to quit.\n"
+	return row.String()
 }
 
 func (m Model) getCurrentChild() (tea.Model, error) {

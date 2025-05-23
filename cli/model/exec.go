@@ -2,11 +2,12 @@ package model
 
 import (
 	"cli/server"
-	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type ExecModel struct {
@@ -53,5 +54,11 @@ func (m ExecModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m ExecModel) View() string {
-	return fmt.Sprintf("\n%s\n\n%s\n", m.pager.View(), m.input.View())
+	row := strings.Builder{}
+	style := lipgloss.NewStyle().Margin(1, 2, 1, 2).Border(lipgloss.RoundedBorder())
+
+	row.WriteString(style.Render(m.pager.View()))
+	row.WriteString(style.Render(m.input.View()))
+
+	return row.String()
 }

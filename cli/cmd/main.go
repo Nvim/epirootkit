@@ -20,7 +20,7 @@ func main() {
 
 	logger = l.Sugar()
 
-	logger.Info("Starting..")
+	// logger.Info("Starting..")
 
 	port := flag.Int("port", 6667, "the port to listen on")
 	flag.Parse()
@@ -47,5 +47,5 @@ func main() {
 		logger.With("error", err).Fatal("error running BubbleTea program")
 	}
 
-	logger.Info("shutting down")
+	// logger.Info("shutting down")
 }
