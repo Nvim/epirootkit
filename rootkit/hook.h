@@ -34,4 +34,7 @@ int clear_hooks(void);
 
 int toggle_hooks(void);
 
+// get current status
+char hook_status(void);
+
 #endif

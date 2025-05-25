@@ -253,3 +253,8 @@ int toggle_hooks(void)
     }
     return hooks_enabled;
 }
+
+char hook_status(void)
+{
+  return hooks_enabled;
+}

