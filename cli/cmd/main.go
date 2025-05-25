@@ -1,10 +1,11 @@
 package main
 
 import (
-	"cli/model"
-	"cli/server"
 	"flag"
 	"net"
+
+	"cli/model"
+	"cli/server"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"go.uber.org/zap"
@@ -26,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	ln, err := net.ListenTCP("tcp4", &net.TCPAddr{
-		IP:   net.ParseIP("127.0.0.1"),
+		IP:   net.ParseIP("0.0.0.0"),
 		Port: *port,
 	})
 	if err != nil {
@@ -40,6 +41,7 @@ func main() {
 		Port:      *port,
 		ConnState: server.Disconnected,
 		Listener:  ln,
+		Channel:   make(chan string),
 	}
 
 	p := tea.NewProgram(model.NewModel(s))

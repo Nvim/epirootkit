@@ -2,11 +2,12 @@ package model
 
 import (
 	"bufio"
-	"cli/server"
-	"cli/style"
 	"context"
 	"fmt"
 	"strings"
+
+	"cli/server"
+	"cli/style"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -17,7 +18,6 @@ import (
 type (
 	Tab                 int
 	ConnectionUpdateMsg server.ConnectionStatus
-	NoopMsg             int
 )
 
 const (
@@ -51,8 +51,8 @@ type Model struct {
 	spinner     *spinner.Model
 	tabs        []Tab
 	currentTab  Tab
-	locked      bool
-	isLoading   bool
+	locked      *bool
+	isLoading   *bool
 	initialized bool // true after BubbleTea loaded and gave us window size
 	width       int
 	heigth      int
@@ -73,13 +73,14 @@ type TabCfg struct {
 func NewModel(s *server.Server) Model {
 	// locked, loading := false, false
 	ctx, fn := context.WithCancel(context.Background())
+	lock, load := false, false
 	m := Model{
 		currentTab:  Exec,
 		server:      s,
 		ctx:         ctx,
 		cancelFn:    fn,
-		locked:      false,
-		isLoading:   false,
+		locked:      &lock,
+		isLoading:   &load,
 		tabs:        []Tab{Exec, Hide, Upload, Download},
 		initialized: false,
 	}
@@ -106,23 +107,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.heigth = msg.Height
 		m.childWidth = int(style.ChildModelWidthRatio * float32(msg.Width))
-		m.childHeight = msg.Height - style.HeaderHeight
+		m.childHeight = msg.Height - 8
 
 		// Instanciate tab components with pointers to root's fields
 		if !m.initialized {
 			tabCfg := TabCfg{
 				srv:       m.server,
-				locked:    &m.locked,
-				isLoading: &m.isLoading,
+				locked:    m.locked,
+				isLoading: m.isLoading,
 				logs:      m.logs,
 				width:     &m.childWidth,
 				height:    &m.childHeight,
 			}
 
 			execModel := NewExecModel(tabCfg)
-			m.execModel = &execModel
+			m.execModel = execModel
+
+			m.spinner = &spinner.Model{}
 
 			m.initialized = true
+		} else {
+			msg.Width = m.childWidth
+			msg.Height = m.childHeight
+			c := m.dispatchToCurrentChild(msg)
+			cmds = append(cmds, c)
 		}
 
 	// Handle important key presses and dispatch to currently focused child
@@ -138,6 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				(*m.server.Sock).Close()
 				m.server.Sock = nil
 			}
+			close(m.server.Channel)
 			m.server.ConnState = server.Disconnected
 			m.cancelFn()
 			return m, tea.Quit
@@ -153,16 +162,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			switch m.currentTab {
-			case Exec:
-				x, cmd := m.execModel.Update(msg)
-				if idk, ok := x.(ExecModel); ok {
-					m.execModel = &idk
-					cmds = append(cmds, cmd)
-				}
-				// case Hide:
-				// case Upload:
-				// case Download:
+			if c := m.dispatchToCurrentChild(msg); c != nil {
+				cmds = append(cmds, c)
 			}
 		}
 	}
@@ -183,17 +184,17 @@ func (m Model) View() string {
 	selectedTabStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), true, true, false, true).
 		Width(tabw).
-		Height(2).
-		Padding(0, 2).
+		Height(1).
+		Padding(0, 0, 1, 0).
 		Align(lipgloss.Center).
 		Foreground(lipgloss.Color("#22AA55"))
 
 	normalTabStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
-		Padding(1, 2, 0, 2).
+		Padding(1, 0, 0, 0).
 		Inherit(selectedTabStyle)
 
-	row := strings.Builder{}
+	right := strings.Builder{}
 
 	tabs := []string{}
 	for _, choice := range m.tabs {
@@ -204,7 +205,8 @@ func (m Model) View() string {
 		}
 	}
 
-	row.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, tabs...))
+	right.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, tabs...))
+	right.WriteString("\n")
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).UnsetBorderTop().
@@ -213,13 +215,49 @@ func (m Model) View() string {
 		Height(m.childHeight)
 
 	if t, err := m.getCurrentChild(); err == nil {
-		row.WriteString(boxStyle.Render(t.View()))
+		right.WriteString(boxStyle.Render(t.View()))
 	} else {
-		row.WriteString(boxStyle.Render(fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())))
+		right.WriteString(boxStyle.Render(fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())))
 	}
 
-	// s += "\nPress q to quit.\n"
-	return row.String()
+	appStyle := lipgloss.NewStyle()
+	screen := strings.Builder{}
+
+	leftStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		Align(lipgloss.Center).
+		Width(m.width - lipgloss.Width(right.String()) - 2).
+		Height(m.childHeight)
+
+	left := strings.Builder{}
+
+	left.WriteString(leftStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Center,
+			fmt.Sprintf("Status: %s", m.server.ConnState.String()),
+			fmt.Sprintf("Sock: %v", m.server.Sock),
+			fmt.Sprintf("Loading: %v (%v)", *m.isLoading, m.isLoading),
+			// m.spinner.View(),
+		)))
+
+	screen.WriteString(appStyle.Render(
+		lipgloss.JoinHorizontal(
+			lipgloss.Bottom,
+			right.String(),
+			left.String(),
+		)))
+	return screen.String()
+}
+
+func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
+	switch m.currentTab {
+	case Exec:
+		x, cmd := m.execModel.Update(msg)
+		if idk, ok := x.(ExecModel); ok {
+			m.execModel = &idk
+		}
+		return cmd
+	}
+	return nil
 }
 
 func (m Model) getCurrentChild() (tea.Model, error) {
@@ -239,18 +277,22 @@ func (m Model) getCurrentChild() (tea.Model, error) {
 
 func (m Model) listenAndAcceptCmd() tea.Cmd {
 	s := m.server
+	if s.ConnState != server.Disconnected {
+		return nil
+	}
+	s.ConnState = server.Listening
 	return func() tea.Msg {
 		for {
 			select {
 			case <-m.ctx.Done():
 				// logger.Info("stopping accepter routine")
-				return NoopMsg(0)
+				return nil
 			default:
 				conn, err := (*s.Listener).Accept()
 				if err != nil {
 					if m.ctx.Err() != nil {
 						// logger.Info("couldn't accept: context stopped")
-						return NoopMsg(0)
+						return nil
 					}
 					// logger.With("error", err).Fatal("couldn't accept TCP connection")
 				}
@@ -262,26 +304,29 @@ func (m Model) listenAndAcceptCmd() tea.Cmd {
 	}
 }
 
+// Read socket every frame, and push bytes to channel.
+// When running a command, the handler will poll channel for result
+// until it's done
 func (m Model) readSocketCmd() tea.Cmd {
 	conn := m.server.Sock
 	return func() tea.Msg {
-		if m.server.ConnState == server.Disconnected {
-			return NoopMsg(0)
+		if m.server.ConnState != server.Connected {
+			return nil
 		}
 
-		_, err := bufio.NewReader(*conn).ReadString('\n')
-		if err != nil {
-			// logger.With("error", err).Info("couldn't read from socket")
-			return ConnectionUpdateMsg(server.Disconnected)
+		r := bufio.NewReader(*conn)
+		for {
+			msg, err := r.ReadString('\n')
+			if err != nil {
+				return ConnectionUpdateMsg(server.Disconnected)
+			}
+
+			select {
+			case <-m.ctx.Done():
+				return nil
+			default:
+				m.server.Channel <- msg
+			}
 		}
-
-		// logger.With("message", message).Info("message received")
-
-		// _, err = fmt.Fprintf(*conn, "you said: %v\n", message)
-		// if err != nil {
-		// logger.With("error", err).Info("couldn't write to socket")
-		// return ConnectionUpdateMsg(server.Disconnected)
-		// }
-		return ConnectionUpdateMsg(server.Connected)
 	}
 }
