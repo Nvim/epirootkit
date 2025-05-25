@@ -47,15 +47,17 @@ type Model struct {
 	server      *server.Server
 	cancelFn    context.CancelFunc
 	execModel   *ExecModel
+	hideModel   *HideModel
 	logs        *viewport.Model
 	spinner     *spinner.Model
 	tabs        []Tab
 	currentTab  Tab
 	locked      *bool
 	isLoading   *bool
+	isHidden    *bool
 	initialized bool // true after BubbleTea loaded and gave us window size
 	width       int
-	heigth      int
+	height      int
 	childWidth  int
 	childHeight int
 }
@@ -73,7 +75,7 @@ type TabCfg struct {
 func NewModel(s *server.Server) Model {
 	// locked, loading := false, false
 	ctx, fn := context.WithCancel(context.Background())
-	lock, load := false, false
+	lock, load, hidden := false, false, false
 	m := Model{
 		currentTab:  Exec,
 		server:      s,
@@ -81,6 +83,7 @@ func NewModel(s *server.Server) Model {
 		cancelFn:    fn,
 		locked:      &lock,
 		isLoading:   &load,
+		isHidden:    &hidden,
 		tabs:        []Tab{Exec, Hide, Upload, Download},
 		initialized: false,
 	}
@@ -101,16 +104,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.server.ConnState == server.Disconnected {
 			m.server.Sock = nil
 			return m, m.listenAndAcceptCmd()
+		} else if m.server.ConnState == server.Connected {
+			return m, m.setIsHidden
 		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		m.heigth = msg.Height
+		m.height = msg.Height
 		m.childWidth = int(style.ChildModelWidthRatio * float32(msg.Width))
 		m.childHeight = msg.Height - 8
 
 		// Instanciate tab components with pointers to root's fields
 		if !m.initialized {
+			vp := viewport.New(m.width-(m.childWidth)-10, int(float32(m.height)*0.4))
+			m.logs = &vp
+
 			tabCfg := TabCfg{
 				srv:       m.server,
 				locked:    m.locked,
@@ -122,6 +130,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			execModel := NewExecModel(tabCfg)
 			m.execModel = execModel
+
+			hideModel := NewHideModel(tabCfg, m.isHidden)
+			m.hideModel = hideModel
 
 			m.spinner = &spinner.Model{}
 
@@ -236,7 +247,7 @@ func (m Model) View() string {
 			fmt.Sprintf("Status: %s", m.server.ConnState.String()),
 			fmt.Sprintf("Sock: %v", m.server.Sock),
 			fmt.Sprintf("Loading: %v (%v)", *m.isLoading, m.isLoading),
-			// m.spinner.View(),
+			lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.logs.View()),
 		)))
 
 	screen.WriteString(appStyle.Render(
@@ -256,6 +267,12 @@ func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
 			m.execModel = &idk
 		}
 		return cmd
+	case Hide:
+		x, cmd := m.hideModel.Update(msg)
+		if idk, ok := x.(HideModel); ok {
+			m.hideModel = &idk
+		}
+		return cmd
 	}
 	return nil
 }
@@ -266,6 +283,7 @@ func (m Model) getCurrentChild() (tea.Model, error) {
 		case Exec:
 			return m.execModel, nil
 		case Hide:
+			return m.hideModel, nil
 		case Upload:
 		case Download:
 		default:
@@ -329,4 +347,26 @@ func (m Model) readSocketCmd() tea.Cmd {
 			}
 		}
 	}
+}
+
+// Run only when we get a connection:
+func (m *Model) setIsHidden() tea.Msg {
+	msg, err := bufio.NewReader(*m.server.Sock).ReadString('\n')
+	if err != nil {
+		if m.logs != nil {
+			m.logs.SetContent("couldn't read hidden status\n")
+		}
+		return ConnectionUpdateMsg(server.Disconnected)
+	}
+	switch msg {
+	case "1\n":
+		*m.isHidden = true
+	case "0\n":
+		*m.isHidden = false
+	default:
+		if m.logs != nil {
+			m.logs.SetContent(fmt.Sprintf("couldn't parse hidden status: %s\n", msg))
+		}
+	}
+	return nil
 }
