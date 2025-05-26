@@ -67,8 +67,12 @@ func (m ExecModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "enter" {
-			cmds = append(cmds, tea.Sequence(m.startExecCmd(m.input.Value()), m.waitForExecResultCmd))
-			m.input.Reset()
+			if !*m.isLoading && !*m.isExecing {
+				cmds = append(cmds, tea.Sequence(m.startExecCmd(m.input.Value()), m.waitForExecResultCmd))
+				m.input.Reset()
+			} else {
+				m.logs.Append("exec: another command is already running\n")
+			}
 		}
 	}
 	*m.input, cmd = m.input.Update(msg)

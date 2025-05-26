@@ -43,22 +43,22 @@ func (c Tab) String() string {
 
 type Model struct {
 	ctx         context.Context
+	isHidden    *bool
 	server      *server.Server
 	cancelFn    context.CancelFunc
 	execModel   *ExecModel
 	hideModel   *HideModel
 	logs        *LogsModel
 	spinner     *spinner.Model
-	tabs        []Tab
-	currentTab  Tab
 	locked      *bool
 	isLoading   *bool
-	isHidden    *bool
-	initialized bool // true after BubbleTea loaded and gave us window size
+	tabs        []Tab
+	currentTab  Tab
 	width       int
 	height      int
 	childWidth  int
 	childHeight int
+	initialized bool
 }
 
 // will be given to each Tab, pointers to root model's fields
@@ -75,6 +75,7 @@ func NewModel(s *server.Server) Model {
 	// locked, loading := false, false
 	ctx, fn := context.WithCancel(context.Background())
 	lock, load, hidden := false, false, false
+	sp := spinner.New(spinner.WithSpinner(spinner.Points))
 	m := Model{
 		currentTab:  Exec,
 		server:      s,
@@ -85,12 +86,13 @@ func NewModel(s *server.Server) Model {
 		isHidden:    &hidden,
 		tabs:        []Tab{Exec, Hide, Upload, Download},
 		initialized: false,
+		spinner:     &sp,
 	}
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.listenAndAcceptCmd()
+	return tea.Batch(m.listenAndAcceptCmd(), m.spinner.Tick)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -134,8 +136,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			hideModel := NewHideModel(tabCfg, m.isHidden)
 			m.hideModel = hideModel
 
-			m.spinner = &spinner.Model{}
-
 			m.initialized = true
 		} else {
 			msg.Width = m.childWidth
@@ -177,13 +177,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, c)
 			}
 		}
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		*m.spinner, cmd = m.spinner.Update(msg)
+		// cmds = append(cmds, cmd)
+		return m, cmd
 	}
 
 	if m.server.ConnState == server.Connected {
 		cmds = append(cmds, m.readSocketCmd())
 	}
 
-	cmds = append(cmds, m.dispatchToLogs(msg))
+	if m.initialized {
+		cmds = append(cmds, m.dispatchToLogs(msg))
+	}
 
 	return m, tea.Batch(cmds...)
 }
@@ -222,11 +230,16 @@ func (m Model) View() string {
 	leftStyle := style.LeftBoxStyle(m.width-lipgloss.Width(right.String())-2, m.childHeight)
 	left := strings.Builder{}
 
+	load := ""
+	if *m.isLoading {
+		load = fmt.Sprintf("%s  Loading...", m.spinner.View())
+	}
+
 	left.WriteString(leftStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Center,
 			fmt.Sprintf("Status: %s", m.server.ConnState.String()),
 			fmt.Sprintf("Sock: %v", m.server.Sock),
-			fmt.Sprintf("Loading: %v (%v)", *m.isLoading, m.isLoading),
+			load,
 			lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.logs.View()),
 		)))
 

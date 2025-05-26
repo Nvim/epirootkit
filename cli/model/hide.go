@@ -47,7 +47,11 @@ func (h HideModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "h" {
-			cmds = append(cmds, tea.Sequence(h.startHideCmd, h.waitForHideResultCmd))
+			if !*h.isLoading && !*h.isDoing {
+				cmds = append(cmds, tea.Sequence(h.startHideCmd, h.waitForHideResultCmd))
+			} else {
+				h.logs.Append("hide: another command is already running\n")
+			}
 		}
 	}
 	return h, tea.Batch(cmds...)
