@@ -7,7 +7,6 @@ import (
 
 	"cli/server"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -15,8 +14,9 @@ type HideModel struct {
 	srv       *server.Server
 	locked    *bool
 	isLoading *bool
-	logs      *viewport.Model
+	logs      *LogsModel
 	isHidden  *bool
+	isDoing   *bool
 }
 
 type (
@@ -25,10 +25,12 @@ type (
 )
 
 func NewHideModel(cfg TabCfg, isHidden *bool) *HideModel {
+	b := false
 	h := HideModel{
 		srv:       cfg.srv,
 		locked:    cfg.locked,
 		isLoading: cfg.isLoading,
+		isDoing:   &b,
 		logs:      cfg.logs,
 		isHidden:  isHidden,
 	}
@@ -72,10 +74,9 @@ func (h HideModel) View() string {
 
 func (h HideModel) startHideCmd() tea.Msg {
 	if *h.isLoading || h.srv.ConnState != server.Connected {
-		h.logs.SetContent("Hide: not connected\n")
+		h.logs.Append("Hide: not connected\n")
 		return nil
 	}
-	*h.isLoading = true
 
 	conn := *h.srv.Sock
 	_, err := fmt.Fprintf(conn, "2\n")
@@ -83,10 +84,15 @@ func (h HideModel) startHideCmd() tea.Msg {
 		return ConnectionUpdateMsg(server.Disconnected)
 	}
 
+	*h.isDoing = true
+	*h.isLoading = true
 	return HideStartCmd(1)
 }
 
 func (h *HideModel) waitForHideResultCmd() tea.Msg {
+	if !*h.isDoing {
+		return nil
+	}
 	ch := h.srv.Channel
 	timer := time.NewTimer(10 * time.Second)
 loop:
@@ -94,17 +100,18 @@ loop:
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				h.logs.SetContent(msg)
+				h.logs.Append(msg)
 				*h.isHidden = !*h.isHidden
 			} else {
-				h.logs.SetContent("hide not ok")
+				h.logs.Append("hide not ok")
 			}
 			break loop
 		case <-timer.C:
-			h.logs.SetContent("hide timed out")
+			h.logs.Append("hide timed out")
 			break loop
 		}
 	}
 	*h.isLoading = false
+	*h.isDoing = false
 	return HideDoneCmd(1)
 }

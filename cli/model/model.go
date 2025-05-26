@@ -10,7 +10,6 @@ import (
 	"cli/style"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -48,7 +47,7 @@ type Model struct {
 	cancelFn    context.CancelFunc
 	execModel   *ExecModel
 	hideModel   *HideModel
-	logs        *viewport.Model
+	logs        *LogsModel
 	spinner     *spinner.Model
 	tabs        []Tab
 	currentTab  Tab
@@ -67,7 +66,7 @@ type TabCfg struct {
 	srv       *server.Server
 	locked    *bool
 	isLoading *bool
-	logs      *viewport.Model
+	logs      *LogsModel
 	width     *int
 	height    *int
 }
@@ -116,8 +115,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Instanciate tab components with pointers to root's fields
 		if !m.initialized {
-			vp := viewport.New(m.width-(m.childWidth)-10, int(float32(m.height)*0.4))
-			m.logs = &vp
+			// vp := viewport.New(m.width-(m.childWidth)-10, int(float32(m.height)*0.4))
+			l := NewLogsModel(m.width-(m.childWidth)-10, int(float32(m.height)*0.4), 1024)
+			m.logs = l
 
 			tabCfg := TabCfg{
 				srv:       m.server,
@@ -183,6 +183,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.readSocketCmd())
 	}
 
+	cmds = append(cmds, m.dispatchToLogs(msg))
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -192,19 +194,8 @@ func (m Model) View() string {
 	}
 
 	tabw := m.childWidth / 4
-	selectedTabStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), true, true, false, true).
-		Width(tabw).
-		Height(1).
-		Padding(0, 0, 1, 0).
-		Align(lipgloss.Center).
-		Foreground(lipgloss.Color("#22AA55"))
-
-	normalTabStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, false, true, false).
-		Padding(1, 0, 0, 0).
-		Inherit(selectedTabStyle)
-
+	selectedTabStyle, normalTabStyle := style.TabStyles(tabw)
+	boxStyle := style.MainBoxStyle(tabw, m.childHeight)
 	right := strings.Builder{}
 
 	tabs := []string{}
@@ -219,12 +210,6 @@ func (m Model) View() string {
 	right.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, tabs...))
 	right.WriteString("\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).UnsetBorderTop().
-		Padding(2).
-		Width(tabw * 4).
-		Height(m.childHeight)
-
 	if t, err := m.getCurrentChild(); err == nil {
 		right.WriteString(boxStyle.Render(t.View()))
 	} else {
@@ -234,12 +219,7 @@ func (m Model) View() string {
 	appStyle := lipgloss.NewStyle()
 	screen := strings.Builder{}
 
-	leftStyle := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		Align(lipgloss.Center).
-		Width(m.width - lipgloss.Width(right.String()) - 2).
-		Height(m.childHeight)
-
+	leftStyle := style.LeftBoxStyle(m.width-lipgloss.Width(right.String())-2, m.childHeight)
 	left := strings.Builder{}
 
 	left.WriteString(leftStyle.Render(
@@ -275,6 +255,14 @@ func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	return nil
+}
+
+func (m *Model) dispatchToLogs(msg tea.Msg) tea.Cmd {
+	x, cmd := m.logs.Update(msg)
+	if idk, ok := x.(LogsModel); ok {
+		m.logs = &idk
+	}
+	return cmd
 }
 
 func (m Model) getCurrentChild() (tea.Model, error) {
@@ -354,7 +342,7 @@ func (m *Model) setIsHidden() tea.Msg {
 	msg, err := bufio.NewReader(*m.server.Sock).ReadString('\n')
 	if err != nil {
 		if m.logs != nil {
-			m.logs.SetContent("couldn't read hidden status\n")
+			m.logs.Append("couldn't read hidden status\n")
 		}
 		return ConnectionUpdateMsg(server.Disconnected)
 	}
@@ -365,7 +353,7 @@ func (m *Model) setIsHidden() tea.Msg {
 		*m.isHidden = false
 	default:
 		if m.logs != nil {
-			m.logs.SetContent(fmt.Sprintf("couldn't parse hidden status: %s\n", msg))
+			m.logs.Append(fmt.Sprintf("couldn't parse hidden status: %s\n", msg))
 		}
 	}
 	return nil

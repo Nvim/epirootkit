@@ -17,11 +17,12 @@ type ExecModel struct {
 	srv       *server.Server
 	locked    *bool
 	isLoading *bool
-	logs      *viewport.Model
+	logs      *LogsModel
 
 	//
-	pager *viewport.Model
-	input *textinput.Model
+	isExecing *bool
+	pager     *viewport.Model
+	input     *textinput.Model
 }
 
 func NewExecModel(cfg TabCfg) *ExecModel {
@@ -33,10 +34,12 @@ func NewExecModel(cfg TabCfg) *ExecModel {
 	ti.PromptStyle.Height(1)
 
 	vp := viewport.New(*cfg.width-8, *cfg.height-10)
+	b := false
 	e := ExecModel{
 		srv:       cfg.srv,
 		locked:    cfg.locked,
 		isLoading: cfg.isLoading,
+		isExecing: &b,
 		logs:      cfg.logs,
 		pager:     &vp,
 		input:     &ti,
@@ -93,18 +96,20 @@ func (m ExecModel) View() string {
 func (m *ExecModel) startExecCmd(command string) tea.Cmd {
 	return func() tea.Msg {
 		if *m.isLoading || m.srv.ConnState != server.Connected {
-			fmt.Println("NOT EXECING")
+			m.logs.Append("exec: not execing\n")
 			return nil
 		}
-		*m.isLoading = true
-		m.pager.SetContent("doing exec")
+		m.logs.Append(fmt.Sprintf("exec: running %s...\n", command))
 
 		conn := *m.srv.Sock
 		_, err := fmt.Fprintf(conn, "0 %s\n", command)
 		if err != nil {
+			m.logs.Append("exec: failed to send command\n")
 			return ConnectionUpdateMsg(server.Disconnected)
 		}
 
+		*m.isLoading = true
+		*m.isExecing = true
 		return ExecStartedMsg(1)
 	}
 }
@@ -112,6 +117,9 @@ func (m *ExecModel) startExecCmd(command string) tea.Cmd {
 // Scheduled after we wrote to socket that we want to exec
 // TODO: error handling, append to logs
 func (m ExecModel) waitForExecResultCmd() tea.Msg {
+	if !*m.isExecing {
+		return nil
+	}
 	var content string
 	ch := m.srv.Channel
 	timer := time.NewTimer(15 * time.Second)
@@ -126,15 +134,16 @@ loop:
 				}
 				content += msg
 			} else {
-				fmt.Println("not ok")
-				m.pager.SetContent("not ok, sadge")
+				m.logs.Append("exec: channel closed\n")
 				break loop
 			}
 		case <-timer.C:
-			m.pager.SetContent("timed out sadge")
+			m.logs.Append("exec: timed out\n")
 			break loop
 		}
 	}
+
+	*m.isExecing = false
 	*m.isLoading = false
 	return ExecDoneMsg(1)
 }
