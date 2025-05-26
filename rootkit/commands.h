@@ -12,6 +12,8 @@ enum command_type
     CMD_HIDE,
     CMD_UPLOAD,
     CMD_DOWNLOAD,
+    CMD_UNLOCK,
+    CMD_LOCK,
     CMD_UNKNOWN
 };
 
