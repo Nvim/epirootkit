@@ -21,7 +21,7 @@ type (
 
 const (
 	Exec Tab = iota
-	Hide
+	HideLock
 	Upload
 	Download
 )
@@ -30,8 +30,8 @@ func (c Tab) String() string {
 	switch c {
 	case Exec:
 		return "Run commands"
-	case Hide:
-		return "Hide"
+	case HideLock:
+		return "Hide/Lock"
 	case Upload:
 		return "Upload a file"
 	case Download:
@@ -49,6 +49,7 @@ type Model struct {
 	execModel   *ExecModel
 	hideModel   *HideModel
 	logs        *LogsModel
+	pwdModel    *PasswordModel
 	spinner     *spinner.Model
 	locked      *bool
 	isLoading   *bool
@@ -84,7 +85,7 @@ func NewModel(s *server.Server) Model {
 		locked:      &lock,
 		isLoading:   &load,
 		isHidden:    &hidden,
-		tabs:        []Tab{Exec, Hide, Upload, Download},
+		tabs:        []Tab{Exec, HideLock, Upload, Download},
 		initialized: false,
 		spinner:     &sp,
 	}
@@ -106,7 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.server.Sock = nil
 			return m, m.listenAndAcceptCmd()
 		} else if m.server.ConnState == server.Connected {
-			return m, m.setIsHidden
+			return m, m.setHiddenLocked
 		}
 
 	case tea.WindowSizeMsg:
@@ -130,11 +131,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				height:    &m.childHeight,
 			}
 
-			execModel := NewExecModel(tabCfg)
-			m.execModel = execModel
-
-			hideModel := NewHideModel(tabCfg, m.isHidden)
-			m.hideModel = hideModel
+			m.execModel = NewExecModel(tabCfg)
+			m.hideModel = NewHideModel(tabCfg, m.isHidden)
+			m.pwdModel = NewPasswordModel(tabCfg)
 
 			m.initialized = true
 		} else {
@@ -218,10 +217,14 @@ func (m Model) View() string {
 	right.WriteString(lipgloss.JoinHorizontal(lipgloss.Center, tabs...))
 	right.WriteString("\n")
 
-	if t, err := m.getCurrentChild(); err == nil {
-		right.WriteString(boxStyle.Render(t.View()))
+	if m.server.ConnState != server.Connected {
+		right.WriteString(boxStyle.Render("\n\t\t\tNot connected.\n\n"))
 	} else {
-		right.WriteString(boxStyle.Render(fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())))
+		if t, err := m.getCurrentChild(); err == nil {
+			right.WriteString(boxStyle.Render(t.View()))
+		} else {
+			right.WriteString(boxStyle.Render(fmt.Sprintf("\n\n\n\t\t [[ TODO %s ]]\n\n\n", m.currentTab.String())))
+		}
 	}
 
 	appStyle := lipgloss.NewStyle()
@@ -253,6 +256,13 @@ func (m Model) View() string {
 }
 
 func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
+	if *m.locked {
+		x, cmd := m.pwdModel.Update(msg)
+		if idk, ok := x.(PasswordModel); ok {
+			m.pwdModel = &idk
+		}
+		return cmd
+	}
 	switch m.currentTab {
 	case Exec:
 		x, cmd := m.execModel.Update(msg)
@@ -260,7 +270,7 @@ func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
 			m.execModel = &idk
 		}
 		return cmd
-	case Hide:
+	case HideLock:
 		x, cmd := m.hideModel.Update(msg)
 		if idk, ok := x.(HideModel); ok {
 			m.hideModel = &idk
@@ -280,10 +290,13 @@ func (m *Model) dispatchToLogs(msg tea.Msg) tea.Cmd {
 
 func (m Model) getCurrentChild() (tea.Model, error) {
 	if m.initialized {
+		if *m.locked {
+			return m.pwdModel, nil
+		}
 		switch m.currentTab {
 		case Exec:
 			return m.execModel, nil
-		case Hide:
+		case HideLock:
 			return m.hideModel, nil
 		case Upload:
 		case Download:
@@ -351,7 +364,7 @@ func (m Model) readSocketCmd() tea.Cmd {
 }
 
 // Run only when we get a connection:
-func (m *Model) setIsHidden() tea.Msg {
+func (m *Model) setHiddenLocked() tea.Msg {
 	msg, err := bufio.NewReader(*m.server.Sock).ReadString('\n')
 	if err != nil {
 		if m.logs != nil {
@@ -359,14 +372,25 @@ func (m *Model) setIsHidden() tea.Msg {
 		}
 		return ConnectionUpdateMsg(server.Disconnected)
 	}
-	switch msg {
-	case "1\n":
+	switch msg[0] {
+	case '1':
 		*m.isHidden = true
-	case "0\n":
+	case '0':
 		*m.isHidden = false
 	default:
 		if m.logs != nil {
 			m.logs.Append(fmt.Sprintf("couldn't parse hidden status: %s\n", msg))
+		}
+	}
+	switch msg[1] {
+	case '1':
+		*m.locked = true
+	case '0':
+		*m.locked = false
+	default:
+		if m.logs != nil {
+			m.logs.Append(fmt.Sprintf("couldn't parse locked status: %s\n", msg))
+			*m.locked = false
 		}
 	}
 	return nil

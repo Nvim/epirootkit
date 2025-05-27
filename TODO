@@ -1,3 +1,14 @@
+# General
+
+bootstrap VM setup (right kernel version + packages, nerd & emoji fonts!)
+find a way build Go binary on attacker's machine, or statically link one from 
+my machine (nixos entered the chat)
+docs for everything:
+- install VMs & use my scripts
+- insert rootkit
+- start & use CLI
+- why kernel sub 5.7
+
 # Rootkit:
 
 - CheckPassword "endpoint" (no lock status, frontend will lock itself)
