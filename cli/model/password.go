@@ -18,7 +18,6 @@ type PasswordModel struct {
 	logs      *LogsModel
 	isDoing   *bool
 	prompt    *textinput.Model
-	password  *string
 }
 
 type (
@@ -39,7 +38,6 @@ func NewPasswordModel(cfg TabCfg) *PasswordModel {
 	ti.CharLimit = 156
 	ti.Width = *cfg.width - 12
 	ti.PromptStyle.Height(1)
-	pwd := ""
 	h := PasswordModel{
 		srv:       cfg.srv,
 		locked:    cfg.locked,
@@ -47,7 +45,6 @@ func NewPasswordModel(cfg TabCfg) *PasswordModel {
 		isDoing:   &b,
 		logs:      cfg.logs,
 		prompt:    &ti,
-		password:  &pwd,
 	}
 
 	return &h
@@ -62,9 +59,9 @@ func (m PasswordModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "enter" {
-			if !*m.isLoading && !*m.isDoing {
-				*m.password = m.prompt.Value()
-				cmds = append(cmds, tea.Sequence(m.startPasswordCmd, m.waitForPasswordResultCmd))
+			password := m.prompt.Value()
+			if !*m.isLoading && !*m.isDoing && password != "" {
+				cmds = append(cmds, tea.Sequence(m.startPasswordCmd(password), m.waitForPasswordResultCmd))
 				m.prompt.Reset()
 			} else {
 				m.logs.Append("password: another command is already running\n")
@@ -90,27 +87,28 @@ func (m PasswordModel) View() string {
 	return s.String()
 }
 
-func (m PasswordModel) startPasswordCmd() tea.Msg {
-	if *m.isLoading || m.srv.ConnState != server.Connected {
-		m.logs.Append("Password: not connected\n")
-		return nil
-	}
+func (m PasswordModel) startPasswordCmd(password string) tea.Cmd {
+	return func() tea.Msg {
+		if *m.isLoading || m.srv.ConnState != server.Connected {
+			m.logs.Append("Password: not connected\n")
+			return nil
+		}
 
-	if *m.password == "" {
-		m.logs.Append("password: no input")
-		return nil
-	}
+		if password == "" {
+			m.logs.Append("password: no input")
+			return nil
+		}
 
-	conn := *m.srv.Sock
-	input := *m.password
-	_, err := fmt.Fprintf(conn, "5 %s\n", input)
-	if err != nil {
-		return ConnectionUpdateMsg(server.Disconnected)
-	}
+		conn := *m.srv.Sock
+		_, err := fmt.Fprintf(conn, "5 %s\n", password)
+		if err != nil {
+			return ConnectionUpdateMsg(server.Disconnected)
+		}
 
-	*m.isDoing = true
-	*m.isLoading = true
-	return PasswordStartCmd(1)
+		*m.isDoing = true
+		*m.isLoading = true
+		return PasswordStartCmd(1)
+	}
 }
 
 func (m *PasswordModel) waitForPasswordResultCmd() tea.Msg {
@@ -147,6 +145,5 @@ loop:
 	}
 	*m.isLoading = false
 	*m.isDoing = false
-	*m.password = ""
 	return PasswordDoneCmd(1)
 }
