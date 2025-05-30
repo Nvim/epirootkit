@@ -132,11 +132,15 @@ loop:
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				if msg == "DONE" || msg == "DONE\n" {
+				switch msg {
+				case "DONE\n":
 					m.pager.SetContent(content)
 					break loop
+				case "OK\n":
+					continue
+				default:
+					content += msg
 				}
-				content += msg
 			} else {
 				m.logs.Append("exec: channel closed\n")
 				break loop

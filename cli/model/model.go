@@ -42,24 +42,25 @@ func (c Tab) String() string {
 }
 
 type Model struct {
-	ctx         context.Context
-	isHidden    *bool
-	server      *server.Server
-	cancelFn    context.CancelFunc
-	execModel   *ExecModel
-	hideModel   *HideModel
-	logs        *LogsModel
-	pwdModel    *PasswordModel
-	spinner     *spinner.Model
-	locked      *bool
-	isLoading   *bool
-	tabs        []Tab
-	currentTab  Tab
-	width       int
-	height      int
-	childWidth  int
-	childHeight int
-	initialized bool
+	ctx           context.Context
+	isHidden      *bool
+	server        *server.Server
+	cancelFn      context.CancelFunc
+	execModel     *ExecModel
+	hideModel     *HideModel
+	downloadModel *DownloadModel
+	logs          *LogsModel
+	pwdModel      *PasswordModel
+	spinner       *spinner.Model
+	locked        *bool
+	isLoading     *bool
+	tabs          []Tab
+	currentTab    Tab
+	width         int
+	height        int
+	childWidth    int
+	childHeight   int
+	initialized   bool
 }
 
 // will be given to each Tab, pointers to root model's fields
@@ -134,6 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.execModel = NewExecModel(tabCfg)
 			m.hideModel = NewHideModel(tabCfg, m.isHidden)
 			m.pwdModel = NewPasswordModel(tabCfg)
+			m.downloadModel = NewDownloadModel(tabCfg)
 
 			m.initialized = true
 		} else {
@@ -276,6 +278,12 @@ func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
 			m.hideModel = &idk
 		}
 		return cmd
+	case Download:
+		x, cmd := m.downloadModel.Update(msg)
+		if idk, ok := x.(DownloadModel); ok {
+			m.downloadModel = &idk
+		}
+		return cmd
 	}
 	return nil
 }
@@ -300,6 +308,7 @@ func (m Model) getCurrentChild() (tea.Model, error) {
 			return m.hideModel, nil
 		case Upload:
 		case Download:
+			return m.downloadModel, nil
 		default:
 			return nil, fmt.Errorf("TODO")
 		}
@@ -383,9 +392,9 @@ func (m *Model) setHiddenLocked() tea.Msg {
 		}
 	}
 	switch msg[1] {
-	case '1':
+	case LOCKED:
 		*m.locked = true
-	case '0':
+	case UNLOCKED:
 		*m.locked = false
 	default:
 		if m.logs != nil {

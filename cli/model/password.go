@@ -18,11 +18,17 @@ type PasswordModel struct {
 	logs      *LogsModel
 	isDoing   *bool
 	prompt    *textinput.Model
+	password  *string
 }
 
 type (
 	PasswordStartCmd int
 	PasswordDoneCmd  int
+)
+
+const (
+	LOCKED   = '1'
+	UNLOCKED = '0'
 )
 
 func NewPasswordModel(cfg TabCfg) *PasswordModel {
@@ -33,6 +39,7 @@ func NewPasswordModel(cfg TabCfg) *PasswordModel {
 	ti.CharLimit = 156
 	ti.Width = *cfg.width - 12
 	ti.PromptStyle.Height(1)
+	pwd := ""
 	h := PasswordModel{
 		srv:       cfg.srv,
 		locked:    cfg.locked,
@@ -40,6 +47,7 @@ func NewPasswordModel(cfg TabCfg) *PasswordModel {
 		isDoing:   &b,
 		logs:      cfg.logs,
 		prompt:    &ti,
+		password:  &pwd,
 	}
 
 	return &h
@@ -55,6 +63,7 @@ func (m PasswordModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "enter" {
 			if !*m.isLoading && !*m.isDoing {
+				*m.password = m.prompt.Value()
 				cmds = append(cmds, tea.Sequence(m.startPasswordCmd, m.waitForPasswordResultCmd))
 				m.prompt.Reset()
 			} else {
@@ -87,8 +96,13 @@ func (m PasswordModel) startPasswordCmd() tea.Msg {
 		return nil
 	}
 
+	if *m.password == "" {
+		m.logs.Append("password: no input")
+		return nil
+	}
+
 	conn := *m.srv.Sock
-	input := m.prompt.Value()
+	input := *m.password
 	_, err := fmt.Fprintf(conn, "5 %s\n", input)
 	if err != nil {
 		return ConnectionUpdateMsg(server.Disconnected)
@@ -112,15 +126,15 @@ loop:
 			if ok {
 				l := msg[0]
 				switch l {
-				case '0':
+				case UNLOCKED:
 					*m.locked = false
 					m.logs.Append("password: welcome, hacker😈\n")
-				case '1':
+				case LOCKED:
 					*m.locked = true
 					m.logs.Append("password: incorrect password❌\n")
 				default:
 					*m.locked = true
-					m.logs.Append("password: couldn't determine lock status\n")
+					m.logs.Append(fmt.Sprintf("password: couldn't determine lock status: %v\n", msg))
 				}
 			} else {
 				m.logs.Append("password not ok\n")
@@ -133,5 +147,6 @@ loop:
 	}
 	*m.isLoading = false
 	*m.isDoing = false
+	*m.password = ""
 	return PasswordDoneCmd(1)
 }
