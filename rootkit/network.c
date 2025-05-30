@@ -55,7 +55,7 @@ int network_init(const char *ip, int port)
     }
 
     vec.iov_base = hide_lock_status;
-    vec.iov_len = 2;
+    vec.iov_len = 3;
 
     if ((ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len)) < 0)
     {
