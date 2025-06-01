@@ -5,6 +5,9 @@
 
 #define MAX_ARGS_LEN 1024
 
+// Stop file upload after this many 1024 bytes chunks have been recieved
+#define MAX_UPLOAD_ITERATIONS 1024 * 1024
+
 enum command_type
 {
     CMD_EXEC_SYNC,
@@ -25,7 +28,6 @@ struct command
     enum command_type type;
     char args[MAX_ARGS_LEN];
     cmd_callback callback;
-    // int status; // stores callback's return value
 };
 
 int cmd_build(struct command *cmd, const char *payload);

