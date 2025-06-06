@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"cli/server"
 	"cli/style"
 
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -49,9 +51,11 @@ type Model struct {
 	execModel     *ExecModel
 	hideModel     *HideModel
 	downloadModel *DownloadModel
+	uploadModel   *UploadModel
 	logs          *LogsModel
 	pwdModel      *PasswordModel
 	spinner       *spinner.Model
+	picker        *filepicker.Model
 	locked        *bool
 	isLoading     *bool
 	tabs          []Tab
@@ -78,6 +82,9 @@ func NewModel(s *server.Server) Model {
 	ctx, fn := context.WithCancel(context.Background())
 	lock, load, hidden := false, false, false
 	sp := spinner.New(spinner.WithSpinner(spinner.Points))
+	p := filepicker.New()
+	p.CurrentDirectory, _ = os.UserHomeDir()
+	p.SetHeight(8)
 	m := Model{
 		currentTab:  Exec,
 		server:      s,
@@ -89,12 +96,13 @@ func NewModel(s *server.Server) Model {
 		tabs:        []Tab{Exec, HideLock, Upload, Download},
 		initialized: false,
 		spinner:     &sp,
+		picker:      &p,
 	}
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.listenAndAcceptCmd(), m.spinner.Tick)
+	return tea.Sequence(m.spinner.Tick, m.picker.Init(), m.listenAndAcceptCmd())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -136,6 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hideModel = NewHideModel(tabCfg, m.isHidden)
 			m.pwdModel = NewPasswordModel(tabCfg)
 			m.downloadModel = NewDownloadModel(tabCfg)
+			m.uploadModel = NewUploadModel(tabCfg, m.picker)
 
 			m.initialized = true
 		} else {
@@ -258,6 +267,7 @@ func (m Model) View() string {
 }
 
 func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
+	// var cmds []tea.Cmd
 	if *m.locked {
 		x, cmd := m.pwdModel.Update(msg)
 		if idk, ok := x.(PasswordModel); ok {
@@ -284,16 +294,33 @@ func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
 			m.downloadModel = &idk
 		}
 		return cmd
+	case Upload:
+		x, cmd := m.uploadModel.Update(msg)
+		if idk, ok := x.(UploadModel); ok {
+			m.uploadModel = &idk
+		}
+		return cmd
 	}
 	return nil
 }
 
 func (m *Model) dispatchToLogs(msg tea.Msg) tea.Cmd {
+	var cmds []tea.Cmd
 	x, cmd := m.logs.Update(msg)
 	if idk, ok := x.(LogsModel); ok {
 		m.logs = &idk
 	}
-	return cmd
+	cmds = append(cmds, cmd)
+
+	// picker's Init method triggers a `readDirMsg` that needs to be handled,
+	// even though cli is locked or another tab is focused
+	_, isKey := msg.(tea.KeyMsg)
+	if !isKey {
+		*m.picker, cmd = m.picker.Update(msg)
+		cmds = append(cmds, cmd)
+		m.logs.Append("updated from dispatchToLogs\n")
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) getCurrentChild() (tea.Model, error) {
@@ -307,6 +334,7 @@ func (m Model) getCurrentChild() (tea.Model, error) {
 		case HideLock:
 			return m.hideModel, nil
 		case Upload:
+			return m.uploadModel, nil
 		case Download:
 			return m.downloadModel, nil
 		default:

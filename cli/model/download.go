@@ -117,7 +117,6 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 		if !*m.isDoing {
 			return nil
 		}
-		m.logs.Append(fmt.Sprintf("no logs i guess %s\n", fileName))
 		if file == nil {
 			m.logs.Append("can't download: file is nil!\n")
 			*m.isLoading = false
@@ -128,6 +127,7 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 		timer := time.NewTimer(10 * time.Second)
 		content := ""
 		wr := bufio.NewWriter(file)
+		// TODO: handle first `OK`
 	loop:
 		for {
 			select {
