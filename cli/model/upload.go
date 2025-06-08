@@ -22,6 +22,7 @@ type UploadModel struct {
 	logs      *LogsModel
 	isDoing   *bool
 
+	height int
 	picker *filepicker.Model
 }
 
@@ -39,8 +40,10 @@ func NewUploadModel(cfg TabCfg, p *filepicker.Model) *UploadModel {
 		isDoing:   &b,
 		logs:      cfg.logs,
 		picker:    p,
+		height: *cfg.height,
 	}
 
+	m.picker.SetHeight(m.height)
 	return &m
 }
 
@@ -79,6 +82,7 @@ func (m UploadModel) View() string {
 	s := strings.Builder{}
 
 	// s.WriteString("\n\n\t\t\tType the path of the file you want to upload\n\n\n")
+	m.picker.SetHeight(m.height-4)
 	s.WriteString(m.picker.View())
 
 	return s.String()
