@@ -317,7 +317,6 @@ func (m *Model) dispatchToLogs(msg tea.Msg) tea.Cmd {
 	if !isKey {
 		*m.picker, cmd = m.picker.Update(msg)
 		cmds = append(cmds, cmd)
-		m.logs.Append("updated from dispatchToLogs\n")
 	}
 	return tea.Batch(cmds...)
 }

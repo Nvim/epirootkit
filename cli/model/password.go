@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -99,8 +100,11 @@ func (m PasswordModel) startPasswordCmd(password string) tea.Cmd {
 			return nil
 		}
 
+		enc := base64.StdEncoding
+		encoded := enc.EncodeToString([]byte(password))
+
 		conn := *m.srv.Sock
-		_, err := fmt.Fprintf(conn, "5 %s\n", password)
+		_, err := fmt.Fprintf(conn, "5 %s\n", encoded)
 		if err != nil {
 			return ConnectionUpdateMsg(server.Disconnected)
 		}
