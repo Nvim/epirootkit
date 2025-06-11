@@ -212,16 +212,15 @@ func (m Model) View() string {
 	}
 
 	tabw := m.childWidth / 4
-	selectedTabStyle, normalTabStyle := style.TabStyles(tabw)
 	boxStyle := style.MainBoxStyle(tabw, m.childHeight)
 	right := strings.Builder{}
 
 	tabs := []string{}
 	for _, choice := range m.tabs {
 		if choice == m.currentTab {
-			tabs = append(tabs, selectedTabStyle.Render(choice.String()))
+			tabs = append(tabs, style.SelectedTab(tabw, int(choice)).Render(choice.String()))
 		} else {
-			tabs = append(tabs, normalTabStyle.Render(choice.String()))
+			tabs = append(tabs, style.NormalTab(tabw, int(choice)).Render(choice.String()))
 		}
 	}
 
