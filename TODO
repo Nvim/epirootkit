@@ -11,9 +11,9 @@ docs for everything:
 
 # Rootkit:
 
-- CheckPassword "endpoint" (no lock status, frontend will lock itself)
 - Cypher packets maybe
 - Handle file upload (touch new file, read sock until DONE)
+- Initial setup (persit + mkdir /rootkit & /rootkit/uploaded)
 
 # CLI:
 

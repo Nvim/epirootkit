@@ -169,7 +169,7 @@ static int do_upload(struct socket *sock, char *args)
     file = filp_open(file_path, O_RDWR | O_CREAT, 0);
     if (IS_ERR(file))
     {
-        sprintf(buf, "KO\n");
+        sprintf(buf, KO_BYTES);
         vec.iov_base = buf;
         vec.iov_len = strlen(buf);
         if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -183,7 +183,7 @@ static int do_upload(struct socket *sock, char *args)
     }
 
     // Send OK:
-    sprintf(buf, "OK\n");
+    sprintf(buf, OK_BYTES);
     vec.iov_base = buf;
     vec.iov_len = strlen(buf);
     if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -211,7 +211,7 @@ static int do_upload(struct socket *sock, char *args)
             filp_close(file, NULL);
             return 1;
         }
-        if (strncmp("DONE", resp_buf, 4) == 0)
+        if (strncmp(DONE_BYTES, resp_buf, DONE_BYTES_LEN) == 0)
         {
             break;
         }
@@ -241,7 +241,7 @@ static int do_download(struct socket *sock, char *args)
     file = filp_open(args, O_RDONLY, 0);
     if (IS_ERR(file))
     {
-        sprintf(buf, "KO\n");
+        sprintf(buf, KO_BYTES);
         vec.iov_base = buf;
         vec.iov_len = strlen(buf);
         if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -255,7 +255,7 @@ static int do_download(struct socket *sock, char *args)
     }
     else
     {
-        sprintf(buf, "OK\n");
+        sprintf(buf, OK_BYTES);
         vec.iov_base = buf;
         vec.iov_len = strlen(buf);
         if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
@@ -281,7 +281,7 @@ static int do_download(struct socket *sock, char *args)
     filp_close(file, NULL);
 
     // Finished with file. Send DONE:
-    sprintf(buf, "DONE\n");
+    sprintf(buf, "%s", DONE_BYTES);
     vec.iov_base = buf;
     vec.iov_len = strlen(buf);
     if ((status = kernel_sendmsg(sock, &hdr, &vec, 1, vec.iov_len)) < 0)
