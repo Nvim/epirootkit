@@ -2,13 +2,12 @@ package model
 
 import (
 	"bufio"
+	"cli/server"
+	"cli/style"
 	"context"
 	"fmt"
 	"os"
 	"strings"
-
-	"cli/server"
-	"cli/style"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -26,6 +25,12 @@ const (
 	HideLock
 	Upload
 	Download
+)
+
+var (
+	OK_BYTES   = []byte{'\x04', '\x03', '\x02', '\x01', 'O', 'K'}
+	KO_BYTES   = []byte{'\x04', '\x03', '\x02', '\x01', 'K', 'O'}
+	DONE_BYTES = []byte{'\x04', '\x03', '\x02', '\x01', 'D', 'O', 'N', 'E'}
 )
 
 func (c Tab) String() string {

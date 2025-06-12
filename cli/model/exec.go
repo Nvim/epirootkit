@@ -1,11 +1,10 @@
 package model
 
 import (
+	"cli/server"
 	"fmt"
 	"strings"
 	"time"
-
-	"cli/server"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -127,16 +126,23 @@ func (m ExecModel) waitForExecResultCmd() tea.Msg {
 	var content string
 	ch := m.srv.Channel
 	timer := time.NewTimer(15 * time.Second)
+	started := false
 loop:
 	for {
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				switch msg {
-				case "DONE\n":
-					m.pager.SetContent(content)
+				switch []byte(msg) {
+				case string(DONE_BYTES):
+					if started {
+						m.pager.SetContent(content)
+					} else {
+						m.logs.Append("exec: no output")
+					}
 					break loop
-				case "OK\n":
+				case string(OK_BYTES):
+					m.logs.Append("exec: started")
+					started = true
 					continue
 				default:
 					content += msg
