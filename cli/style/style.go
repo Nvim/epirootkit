@@ -7,6 +7,12 @@ import (
 var (
 	HeaderHeight         int     = 16
 	ChildModelWidthRatio float32 = 0.6
+	LightGreen                   = lipgloss.Color("#11cc11")
+	DarkGreen                    = lipgloss.Color("#117211")
+	VeryDark                     = lipgloss.Color("#004400")
+	Blue                         = lipgloss.Color("#4a8d7e")
+	Purple                       = lipgloss.Color("#9472b4")
+	Gray                         = lipgloss.Color("#9ea0a2")
 )
 
 func SelectedTab(tabw, position int) (selected lipgloss.Style) {
@@ -28,9 +34,11 @@ func SelectedTab(tabw, position int) (selected lipgloss.Style) {
 		Border(border).
 		Width(tabw).
 		Height(1).
-		Padding(0, 0, 1, 0).
+		Padding(1, 0, 0, 0).
 		Align(lipgloss.Center).
-		Foreground(lipgloss.Color("#22AA55"))
+		Foreground(LightGreen).
+		BorderForeground(VeryDark).
+		Bold(true)
 
 	return selected
 }
@@ -55,22 +63,23 @@ func NormalTab(tabw, position int) (normal lipgloss.Style) {
 		MiddleTop:    "",
 		MiddleBottom: "",
 	}
-	if position == 0 {
+	if position == 3 {
 		// bn.BottomRight = "┌"
 		// bn.BottomLeft =  "┐"
 		// bn.BottomLeft =  "@"
 		bn.BottomRight = "┐"
 	}
-	if position == 3 {
+	if position == 0 {
 		// bn.BottomRight = "@"
 		bn.BottomLeft = "┌"
 	}
 	normal = lipgloss.NewStyle().
-		Border(bn, false, false, true, false).
+		Border(bn, false, true, true, true).
 		Padding(1, 0, 0, 0).
-		Width(tabw).
+		Width(tabw - 2).
 		Height(1).
-		Align(lipgloss.Center)
+		Align(lipgloss.Center).
+		BorderForeground(VeryDark)
 
 	return
 }
@@ -95,7 +104,9 @@ func MainBoxStyle(tabw, height int) lipgloss.Style {
 		Border(normalBorder).
 		Padding(2).
 		Width(tabw * 4).
-		Height(height)
+		Height(height).
+		BorderForeground(VeryDark).
+		Foreground(Gray)
 }
 
 func LeftBoxStyle(width, height int) lipgloss.Style {
@@ -103,7 +114,9 @@ func LeftBoxStyle(width, height int) lipgloss.Style {
 		Border(lipgloss.NormalBorder()).
 		Align(lipgloss.Center).
 		Width(width).
-		Height(height)
+		Height(height).
+		BorderForeground(VeryDark).
+		Foreground(Gray)
 
 	return leftStyle
 }

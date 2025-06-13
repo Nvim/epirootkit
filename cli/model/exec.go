@@ -23,6 +23,8 @@ type ExecModel struct {
 	isExecing *bool
 	pager     *viewport.Model
 	input     *textinput.Model
+	width     int
+	height    int
 }
 
 func NewExecModel(cfg TabCfg) *ExecModel {
@@ -33,7 +35,7 @@ func NewExecModel(cfg TabCfg) *ExecModel {
 	ti.Width = *cfg.width - 12
 	ti.PromptStyle.Height(1)
 
-	vp := viewport.New(*cfg.width-8, *cfg.height-10)
+	vp := viewport.New(*cfg.width-8, *cfg.height-12)
 	b := false
 	e := ExecModel{
 		srv:       cfg.srv,
@@ -43,6 +45,8 @@ func NewExecModel(cfg TabCfg) *ExecModel {
 		logs:      cfg.logs,
 		pager:     &vp,
 		input:     &ti,
+		width:     *cfg.width - 4,
+		height:    *cfg.height - 4,
 	}
 
 	return &e
@@ -65,6 +69,12 @@ func (m ExecModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.height = msg.Height - 4
+		m.width = msg.Width - 4
+		m.pager.Width = msg.Width - 8
+		m.pager.Height = msg.Height - 12
+		m.input.Width = msg.Width - 12
 	case tea.KeyMsg:
 		if msg.String() == "enter" {
 			if !*m.isLoading && !*m.isExecing {
@@ -84,15 +94,18 @@ func (m ExecModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m ExecModel) View() string {
 	row := strings.Builder{}
 	style := lipgloss.NewStyle().
-		// Margin(1, 2, 1, 2).
 		Border(lipgloss.RoundedBorder())
 
+	a := lipgloss.NewStyle().Width(m.width).Height(m.height)
+
 	row.WriteString(
-		lipgloss.JoinVertical(
-			lipgloss.Center,
-			style.Render(m.pager.View()),
-			style.Render(m.input.View()),
-		))
+		a.Render(
+			lipgloss.JoinVertical(
+				lipgloss.Center,
+				style.Render(m.pager.View()),
+				style.Render(m.input.View()),
+			)),
+	)
 
 	return row.String()
 }

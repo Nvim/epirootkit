@@ -38,6 +38,8 @@ func NewPasswordModel(cfg TabCfg) *PasswordModel {
 	ti.CharLimit = 156
 	ti.Width = *cfg.width - 12
 	ti.PromptStyle.Height(1)
+	ti.EchoMode = textinput.EchoPassword
+	ti.EchoCharacter = '*'
 	h := PasswordModel{
 		srv:       cfg.srv,
 		locked:    cfg.locked,

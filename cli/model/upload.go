@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type UploadModel struct {
@@ -22,6 +23,7 @@ type UploadModel struct {
 	logs      *LogsModel
 	isDoing   *bool
 
+	width  int
 	height int
 	picker *filepicker.Model
 }
@@ -40,10 +42,11 @@ func NewUploadModel(cfg TabCfg, p *filepicker.Model) *UploadModel {
 		isDoing:   &b,
 		logs:      cfg.logs,
 		picker:    p,
+		width:     *cfg.width,
 		height:    *cfg.height,
 	}
 
-	m.picker.SetHeight(m.height)
+	m.picker.SetHeight(m.height - 4)
 	return &m
 }
 
@@ -55,19 +58,26 @@ func (m UploadModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	var cmd tea.Cmd
-	*m.picker, cmd = m.picker.Update(msg)
-	cmds = append(cmds, cmd)
-	if didSelect, path := m.picker.DidSelectFile(msg); didSelect {
-		// Don't accept commands if an upload is already running:
-		if *m.isLoading || *m.isDoing {
-			m.logs.Append("upload: another operation is pending\n")
-		} else {
-			f, err := os.Open(path)
-			if err != nil {
-				m.logs.Append(fmt.Sprintf("upload: couldn't open file %s: %v\n", path, err))
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.width = msg.Width
+		m.picker.SetHeight(m.height - 6)
+	default:
+		*m.picker, cmd = m.picker.Update(msg)
+		cmds = append(cmds, cmd)
+		if didSelect, path := m.picker.DidSelectFile(msg); didSelect {
+			// Don't accept commands if an upload is already running:
+			if *m.isLoading || *m.isDoing {
+				m.logs.Append("upload: another operation is pending\n")
 			} else {
-				p := filepath.Base(path)
-				cmds = append(cmds, tea.Sequence(m.startUploadCmd(p), m.waitForUploadResultCmd(p, f)))
+				f, err := os.Open(path)
+				if err != nil {
+					m.logs.Append(fmt.Sprintf("upload: couldn't open file %s: %v\n", path, err))
+				} else {
+					p := filepath.Base(path)
+					cmds = append(cmds, tea.Sequence(m.startUploadCmd(p), m.waitForUploadResultCmd(p, f)))
+				}
 			}
 		}
 	}
@@ -81,9 +91,18 @@ func (m UploadModel) View() string {
 	}
 	s := strings.Builder{}
 
-	// s.WriteString("\n\n\t\t\tType the path of the file you want to upload\n\n\n")
-	m.picker.SetHeight(m.height - 4)
-	s.WriteString(m.picker.View())
+	m.picker.SetHeight(m.height - 6)
+	a := lipgloss.NewStyle().
+		Width(m.width - 4).
+		Height(m.height - 4)
+
+	s.WriteString(a.Render(
+		lipgloss.Place(m.width-4, m.height-4, lipgloss.Left, lipgloss.Left,
+			lipgloss.JoinVertical(lipgloss.Left,
+				lipgloss.NewStyle().Italic(true).Render("Select a file to upload:"),
+				m.picker.View(),
+			),
+		)))
 
 	return s.String()
 }

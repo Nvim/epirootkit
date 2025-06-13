@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"cli/server"
+	"cli/style"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type HideModel struct {
@@ -17,6 +19,8 @@ type HideModel struct {
 	logs      *LogsModel
 	isHidden  *bool
 	isDoing   *bool
+	width     int
+	height    int
 }
 
 type (
@@ -40,6 +44,8 @@ func NewHideModel(cfg TabCfg, isHidden *bool) *HideModel {
 		isDoing:   &b,
 		logs:      cfg.logs,
 		isHidden:  isHidden,
+		width:     *cfg.width,
+		height:    *cfg.height,
 	}
 
 	return &h
@@ -68,6 +74,9 @@ func (h HideModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		}
+	case tea.WindowSizeMsg:
+		h.width = msg.Width
+		h.height = msg.Height
 	}
 	return h, tea.Batch(cmds...)
 }
@@ -78,23 +87,39 @@ func (h HideModel) View() string {
 	}
 	s := strings.Builder{}
 
-	hideStatus := "Not Hidden"
-	hideToggle := "hide"
+	hideStatus := "🔴 Not Hidden"
+	hideToggle := "Hide"
 	if *h.isHidden {
-		hideStatus = "Hidden"
+		hideStatus = "🤫 Hidden"
 		hideToggle = "reveal"
 	}
 
-	lockStatus := "Unlocked"
+	lockStatus := "🔓 Unlocked"
 	lockToggle := "Lock"
 	if *h.locked {
-		lockStatus = "Locked"
+		lockStatus = "🔐 Locked"
 		lockToggle = "Unlock"
 	}
 
-	s.WriteString(fmt.Sprintf("Status: %s | %s\n", hideStatus, lockStatus))
-	s.WriteString(fmt.Sprintf("Press 'h' to %s.\n", hideToggle))
-	s.WriteString(fmt.Sprintf("Press 'l' to %s.\n", lockToggle))
+	a := lipgloss.NewStyle().
+		Width(h.width - 4).
+		Height(h.height - 4)
+
+	italic := lipgloss.NewStyle().Italic(true).Foreground(style.Purple)
+
+	s.WriteString(a.Render(
+		lipgloss.Place(h.width-4, h.height-4, lipgloss.Center, lipgloss.Center,
+			lipgloss.JoinVertical(lipgloss.Center,
+				lipgloss.JoinVertical(lipgloss.Left,
+					fmt.Sprintf("Lock status: %s", lockStatus),
+					fmt.Sprintf("Hide Status: %s\n", hideStatus),
+				),
+				lipgloss.JoinVertical(lipgloss.Left,
+					italic.Render("Press 'h' to", hideToggle),
+					italic.Render("Press 'l' to", lockToggle),
+				),
+			),
+		)))
 
 	return s.String()
 }

@@ -90,6 +90,10 @@ func NewModel(s *server.Server) Model {
 	sp := spinner.New(spinner.WithSpinner(spinner.Points))
 	p := filepicker.New()
 	p.CurrentDirectory, _ = os.UserHomeDir()
+	p.Styles.Cursor = p.Styles.Cursor.Foreground(style.LightGreen)
+	p.Styles.Selected = p.Styles.Cursor.Foreground(style.LightGreen)
+	p.Styles.File = p.Styles.File.Foreground(style.DarkGreen)
+	p.Styles.Directory = p.Styles.Directory.Foreground(style.Blue)
 	p.SetHeight(8)
 	m := Model{
 		currentTab:  Exec,
