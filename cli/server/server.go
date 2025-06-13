@@ -13,14 +13,14 @@ const (
 func (c ConnectionStatus) String() string {
 	switch c {
 	case Connected:
-		return "CONNECTED"
+		return "✅ CONNECTED"
 	case Listening:
-		return "LISTENING"
+		return "📡 LISTENING"
 	case Disconnected:
 	default:
-		return "DISCONNECTED"
+		return "❌ DISCONNECTED"
 	}
-	return "DISCONNECTED"
+	return "❌ DISCONNECTED"
 }
 
 type Server struct {

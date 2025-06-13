@@ -158,6 +158,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.initialized = true
 		} else {
+			m.logs.pager.Width = m.width - (m.childWidth) - 10
+			m.logs.pager.Height = int(float32(m.height) * 0.4)
 			msg.Width = m.childWidth
 			msg.Height = m.childHeight
 			c := m.dispatchToCurrentChild(msg)
@@ -254,12 +256,21 @@ func (m Model) View() string {
 		load = fmt.Sprintf("%s  Loading...", m.spinner.View())
 	}
 
+	listen := ""
+	if m.server.ConnState == server.Listening {
+		listen = m.spinner.View()
+	}
+
 	left.WriteString(leftStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Center,
-			fmt.Sprintf("Status: %s", m.server.ConnState.String()),
-			fmt.Sprintf("Sock: %v", m.server.Sock),
-			load,
-			lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.logs.View()),
+			lipgloss.NewStyle().Bold(true).Render("Status:", m.server.ConnState.String(), listen),
+			"\n",
+			lipgloss.NewStyle().Italic(true).Foreground(style.Purple).Render(load),
+			"\n",
+			topBorder("Logs", m.logs.pager.Width),
+			lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder(), false, true, true, true).
+				Render(m.logs.View()),
 		)))
 
 	screen.WriteString(appStyle.Render(
@@ -269,6 +280,15 @@ func (m Model) View() string {
 			left.String(),
 		)))
 	return screen.String()
+}
+
+func topBorder(title string, width int) string {
+	char := "─"
+	return fmt.Sprintf("┌%s┤ %s ├%s┐",
+		strings.Repeat(char, (width/2)-len(title)),
+		title,
+		strings.Repeat(char, (width/2)-len(title)),
+	)
 }
 
 func (m *Model) dispatchToCurrentChild(msg tea.Msg) tea.Cmd {
