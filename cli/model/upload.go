@@ -2,13 +2,14 @@ package model
 
 import (
 	"bufio"
-	"cli/server"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"cli/server"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	tea "github.com/charmbracelet/bubbletea"
@@ -175,14 +176,14 @@ func (m UploadModel) readAndSend(file *os.File) error {
 
 		_, err = fmt.Fprint(conn, string(buf[:n]))
 		if err != nil {
-			m.logs.Append(fmt.Sprintf("uplaod: error sending file's content to rootkit: %s", err.Error()))
+			m.logs.Append(fmt.Sprintf("upload: error sending file's content to rootkit: %s\n", err.Error()))
 			return err
 		}
 	}
 
 	_, err := fmt.Fprintf(conn, "%s", DONE_BYTES)
 	if err != nil {
-		m.logs.Append(fmt.Sprintf("uplaod: error sending DONE status to rootkit: %s", err.Error()))
+		m.logs.Append(fmt.Sprintf("uplaod: error sending DONE status to rootkit: %s\n", err.Error()))
 		return err
 	}
 

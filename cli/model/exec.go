@@ -1,10 +1,11 @@
 package model
 
 import (
-	"cli/server"
 	"fmt"
 	"strings"
 	"time"
+
+	"cli/server"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -132,16 +133,16 @@ loop:
 		select {
 		case msg, ok := <-ch:
 			if ok {
-				switch []byte(msg) {
+				switch msg {
 				case string(DONE_BYTES):
 					if started {
 						m.pager.SetContent(content)
 					} else {
-						m.logs.Append("exec: no output")
+						m.logs.Append("exec: no output\n")
 					}
 					break loop
 				case string(OK_BYTES):
-					m.logs.Append("exec: started")
+					m.logs.Append("exec: started\n")
 					started = true
 					continue
 				default:

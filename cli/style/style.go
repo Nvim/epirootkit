@@ -70,8 +70,7 @@ func NormalTab(tabw, position int) (normal lipgloss.Style) {
 		Padding(1, 0, 0, 0).
 		Width(tabw).
 		Height(1).
-		Align(lipgloss.Center).
-		Background(lipgloss.Color("#222255"))
+		Align(lipgloss.Center)
 
 	return
 }

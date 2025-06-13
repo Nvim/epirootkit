@@ -1,13 +1,14 @@
 package model
 
 import (
-	"bufio"
-	"cli/server"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"cli/server"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -111,7 +112,7 @@ func (m DownloadModel) startDownloadCmd(input string) tea.Cmd {
 	}
 }
 
-func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string) tea.Cmd {
+func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, _ string) tea.Cmd {
 	return func() tea.Msg {
 		if !*m.isDoing {
 			return nil
@@ -122,37 +123,29 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 			*m.isDoing = false
 			return DownloadDoneCmd(0)
 		}
+		defer file.Close()
 		ch := m.srv.Channel
 		timer := time.NewTimer(10 * time.Second)
-		content := ""
-		wr := bufio.NewWriter(file)
-		started := false
+		content := &bytes.Buffer{}
+		n := 0
+
 	loop:
 		for {
 			select {
 			case msg, ok := <-ch:
 				if ok {
 					switch msg {
-					case string(DONE_BYTES):
-						if started {
-							m.logs.Append("Download finished\n")
-						} else {
-							m.logs.Append("Download: empty file\n")
-						}
-						break loop
 					case string(OK_BYTES):
 						m.logs.Append("Download started\n")
-						started = true
-						continue
 					case string(KO_BYTES):
 						m.logs.Append("download: couldn't open file\n")
 						break loop
+					case string(DONE_BYTES):
+						m.logs.Append(fmt.Sprintf("Download finished: %d\n", n))
+						break loop
 					default:
-						if started {
-							content += msg
-						} else {
-							break loop
-						}
+						content.WriteString(msg)
+						n++
 					}
 				} else {
 					m.logs.Append("download canceled\n")
@@ -164,18 +157,14 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, fileName string)
 			}
 		}
 
-		if !started {
-			m.logs.Append("download failed")
-		} else {
-			_, err := wr.WriteString(content)
+		if content.Len() > 0 {
+			_, err := file.Write(content.Bytes())
 			if err != nil {
 				m.logs.Append(fmt.Sprintf("couldnt write to file: %s\n", err.Error()))
 			}
-			if err = wr.Flush(); err != nil {
-				m.logs.Append(fmt.Sprintf("couln't flush: %s\n", err.Error()))
-			}
+		} else {
+			m.logs.Append("download failed\n")
 		}
-		file.Close()
 		*m.isLoading = false
 		*m.isDoing = false
 		return DownloadDoneCmd(1)

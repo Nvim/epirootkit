@@ -2,12 +2,13 @@ package model
 
 import (
 	"bufio"
-	"cli/server"
-	"cli/style"
 	"context"
 	"fmt"
 	"os"
 	"strings"
+
+	"cli/server"
+	"cli/style"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -28,9 +29,9 @@ const (
 )
 
 var (
-	OK_BYTES   = []byte{'\x04', '\x03', '\x02', '\x01', 'O', 'K'}
-	KO_BYTES   = []byte{'\x04', '\x03', '\x02', '\x01', 'K', 'O'}
-	DONE_BYTES = []byte{'\x04', '\x03', '\x02', '\x01', 'D', 'O', 'N', 'E'}
+	OK_BYTES   = []byte{0x04, 0x03, 0x02, 0x01, 'O', 'K', '\n'}
+	KO_BYTES   = []byte{0x04, 0x03, 0x02, 0x01, 'K', 'O', '\n'}
+	DONE_BYTES = []byte{0x04, 0x03, 0x02, 0x01, 'F', 'I', 'N', 'I', 'S', 'H', 'E', 'D', '\n'}
 )
 
 func (c Tab) String() string {
@@ -121,7 +122,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.server.Sock = nil
 			return m, m.listenAndAcceptCmd()
 		} else if m.server.ConnState == server.Connected {
-			return m, m.setHiddenLocked
+			return m, tea.Sequence(m.setHiddenLocked, m.readSocketCmd())
 		}
 
 	case tea.WindowSizeMsg:
@@ -198,10 +199,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		*m.spinner, cmd = m.spinner.Update(msg)
 		// cmds = append(cmds, cmd)
 		return m, cmd
-	}
-
-	if m.server.ConnState == server.Connected {
-		cmds = append(cmds, m.readSocketCmd())
 	}
 
 	if m.initialized {
@@ -382,7 +379,7 @@ func (m Model) listenAndAcceptCmd() tea.Cmd {
 func (m Model) readSocketCmd() tea.Cmd {
 	conn := m.server.Sock
 	return func() tea.Msg {
-		if m.server.ConnState != server.Connected {
+		if !m.initialized || conn == nil || m.server.ConnState != server.Connected {
 			return nil
 		}
 
