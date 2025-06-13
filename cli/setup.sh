@@ -21,6 +21,10 @@ echo "export PATH=\$PATH:/usr/local/go/bin" >> ~/.bashrc
 source ~/.bashrc
 rm go1.24.4.linux-amd64.tar.gz
 
+echo "Installing a Nerd Font..."
+curl -fsSL https://raw.githubusercontent.com/getnf/getnf/main/install.sh | bash
+~/.local/bin/getnf -i JetBrainsMono
+
 echo "Go version: $(go version)"
 
 echo "Setup complete"
