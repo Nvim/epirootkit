@@ -198,10 +198,16 @@ static int do_upload(struct socket *sock, char *args)
     resp_vec.iov_len = 1024;
     while (1)
     {
+        if (++safeguard > MAX_UPLOAD_ITERATIONS)
+        {
+            pr_warn(
+                "commands: upload: too many iterations, stopping upload.\n");
+            break;
+        }
         ret = kernel_recvmsg(sock, &resp_msg, &resp_vec, 1, 1024, MSG_DONTWAIT);
         if (ret == -EAGAIN || ret == -EWOULDBLOCK)
         {
-            msleep(500);
+            msleep(100);
             continue;
         }
         if (ret < 0)
@@ -211,18 +217,14 @@ static int do_upload(struct socket *sock, char *args)
             filp_close(file, NULL);
             return 1;
         }
-        if (strncmp(DONE_BYTES, resp_buf, DONE_BYTES_LEN) == 0)
+        if (strstr(resp_buf, DONE_BYTES) != NULL)
         {
+            pr_info("commands: upload: found DONE sequence. exiting\n");
+            kernel_write(file, resp_buf, ret - DONE_BYTES_LEN, &pos);
             break;
         }
 
         kernel_write(file, resp_buf, ret, &pos);
-        if (++safeguard > MAX_UPLOAD_ITERATIONS)
-        {
-            pr_warn(
-                "commands: upload: too many iterations, stopping upload.\n");
-            break;
-        }
     }
     filp_close(file, NULL);
     return 0;

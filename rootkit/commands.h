@@ -42,9 +42,12 @@ enum cmd_build_err
     ERR_BAD_ARGS, // arguments are invalid (used for too short early-return)
 };
 
-const char* DONE_BYTES = "\x04\x03\x02\x01DONE";
-const char* OK_BYTES = "\x04\x03\x02\x01OK";
-const char* KO_BYTES = "\x04\x03\x02\x01KO";
-#define DONE_BYTES_LEN 8
+static const char* DONE_BYTES = "\x04\x03\x02\x01""FINISHED\n";
+static const char* OK_BYTES = "\x04\x03\x02\x01""OK\n";
+static const char* KO_BYTES = "\x04\x03\x02\x01""KO\n";
+#define DONE_BYTES_LEN 13
+// static const char* DONE_BYTES = "DONE\n";
+// static const char* OK_BYTES = "OK\n";
+// static const char* KO_BYTES = "KO\n";
 
 #endif // !COMMANDS_H
