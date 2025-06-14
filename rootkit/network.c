@@ -184,6 +184,10 @@ int network_loop(void *data)
             pr_info("network: command ran successfully.\n");
         }
     }
+    if (cfg){
+        kfree(cfg);
+        cfg = NULL;
+    }
     return 0;
 }
 
