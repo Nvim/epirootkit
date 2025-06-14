@@ -184,12 +184,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelFn()
 			return m, tea.Quit
 
-		case "shift+tab", "right":
+		case "shift+tab", "left":
 			if m.currentTab > 0 {
 				m.currentTab--
 			}
 
-		case "tab", "left":
+		case "tab", "right":
 			if m.currentTab != Download {
 				m.currentTab++
 			}
