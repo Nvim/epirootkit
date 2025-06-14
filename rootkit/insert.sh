@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-ip="192.168.1.53" # My local IP, overwrite this
-port="6667" # Default port
+ip="127.0.0.1" # Default IP, overwrite this
+port="6667"    # Default port, no need to overwrite
 
 if (( $# > 2 )); then
   echo "Usage: $0 [ip] [port]"
