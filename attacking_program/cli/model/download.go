@@ -141,7 +141,7 @@ func (m *DownloadModel) waitForDownloadResultCmd(file *os.File, _ string) tea.Cm
 						m.logs.Append("download: couldn't open file\n")
 						break loop
 					case string(DONE_BYTES):
-						m.logs.Append(fmt.Sprintf("Download finished: %d\n", n))
+						m.logs.Append("Download finished\n")
 						break loop
 					default:
 						content.WriteString(msg)

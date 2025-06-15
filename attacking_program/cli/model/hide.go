@@ -156,8 +156,10 @@ loop:
 				switch l {
 				case HOOKS_DISABLED:
 					*h.isHidden = false
+					h.logs.Append("revealing rootkit!\n")
 				case HOOKS_ENABLED:
 					*h.isHidden = true
+					h.logs.Append("rootkit is invisible 😈\n")
 				default:
 					h.logs.Append(fmt.Sprintf("hide: couldn't determine hide status: %v\n", msg))
 				}
