@@ -1,7 +1,10 @@
 # Epirootkit
 
-some sneaky rootkit with a cool program to manage it remotely
-TODO intro
+This is the documentation for the rootkit I made for EPITA's SYS2 class: __epirootkit__.
+
+- [Setup](#setup)
+- [Usage](#using-the-rootkit)
+- [Technical details](#inner-workings)
 
 ## Setup
 
@@ -88,7 +91,7 @@ I will demonstrate the last option here as it is very straightforward. First, cl
 blue "info" button on the top bar of your Virt-Manager window, navigate to the "NIC"
 tab, and take note of the "IP address" field (or use the `ip a` command).
 
-![vm's ip address](./img/2025-06-14-191539_hyprshot.png) 
+![VM's IP address](./img/2025-06-14-191539_hyprshot.png) 
 
 Open a terminal in the VM and install SSH with the following command:
 
@@ -160,7 +163,7 @@ The script will update the repos and install the needed packages. It will then
 download Go 1.24.4 from the official website, extract it and put the binary in
 `/usr/local`. The script will then update the user's path and print the result
 of `go version`, to assert that everything went well. A [Nerd
-Font](https://www.nerdfonts.com/) will also be installed, as the CLI makes use
+Font](https://www.nerdfonts.com/) will also be installed, as the TUI makes use
 of various special characters and emojis.
 
 After running the script, run `source ~/.bashrc` to update the `$PATH` of your
@@ -206,7 +209,7 @@ the kernel logs with `dmesg -L -T -w`.
 > acutally go unnoticed, but being a pedagocical project, I choose to keep the
 > logs enabled by default, so you can see what's going on under the hood.
 
-### Starting the CLI
+### Starting the TUI
 
 The attacking program uses a Makefile with a `build` and a `run` rule.
 Simply running `make run` will start the program. If you've set the right
@@ -218,7 +221,7 @@ checking the kernel logs of the infected machine.
 Congratulations, you can now remotely control this poor Ubuntu VM while staying
 _completely_ hidden!
 
-### Using the CLI
+### Using the TUI
 
 The UI is composed of a main pane on the left, and of a secondary one on the
 right. The right pane is always visible and displays the connection status as
@@ -490,16 +493,245 @@ popular distro).
 
 ### Attacking program
 
-TODO
 #### Technical choices 
 
-I use Go btw
+For my attacking program, I didn't want to build something web-based (I've had
+enough latetly), but wanted something more elaborated than rudimentary scripts
+or a blank CLI. I opted to build a TUI instead to learn something new, and
+mostly for style points. While I initially thaught about using `ncurses`, I
+stumbled upon [Bubbletea](https://github.com/charmbracelet/bubbletea), and the
+[Charm libraries](https://charm.sh/libs/). I am already proficient with Go and 
+it is my go-to high-level language when I need to build something fast, so I 
+went with Bubbletea.
+
+Despite being a very small and minimal language, Go's standard library provides
+all the building blocks needed to build this kind of apps, as well as very
+pleasant tools to work with concurrency (channels and context rock). This means
+I didn't need to integrate any external dependency besides Bubbletea for
+creating a TUI interface. The
+[Bubbles](https://github.com/charmbracelet/bubbles) and
+[Lipgloss](https://github.com/charmbracelet/lipgloss) packages by the same
+author were also used as they allowed me to avoid redefining some basic
+components and style primitives.
 
 #### Bubbletea program
 
 elm architecture blabla it's very cool
 
+I'll briefly explain how Bubbletea programs are architectured so you can
+understand how and why my code works, but I highly recommend reading [the basic
+guide](https://github.com/charmbracelet/bubbletea/tree/main/tutorials/basics),
+as well as [the one on
+commands](https://github.com/charmbracelet/bubbletea/tree/main/tutorials/commands)
+if you really want to learn how this works.
+
+A Bubbltea application is cenered on a `Model`: it is an object that can
+contain any number of data fields and methods, provided it implements the
+following interface:
+
+```go 
+// In Go, functions can return multiple values
+func (m Model) Init() tea.Cmd
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd)
+func (m Model) View() string
+```
+
+The `(m Model)` before each function's name means that the function is a method
+of the `Model` type, and needs to be called on a `Model` instance.
+
+The `View` method will return a string corresponding to what will be displayed
+on the terminal for this frame. The creation of the string is made easy by 
+the numerous utilites available, such as coloring text, adding border, padding
+and margins around elements, joining elements toghether...
+
+The `Init` method returns a __command__ (`tea.Cmd`). A command is a callback function
+with the following signature:
+
+```go
+func() tea.Msg
+```
+
+Basically, it's a function that takes no arguments, and returns a __message__ (`tea.Msg`).
+On every command ran, the `Update` method will be called with the emitted message as an
+argument. There are a couple message pre-defined by the library, such as `KeyMsg` or 
+`WindowSizeMsg`, and the user can easily define more as messages can be anything: they are
+just like a typedef in C over an empty interface.
+
+```go
+type Msg interface{}
+```
+
+For more advanced programs, Bubbletea provides poweful commands such as
+`tea.Batch` or `tea.Sequence` for dispatching multiple commands from a single
+`Update` call. The former will run all of them concurrently, while the latter
+will sequence the order in which they run. They are used a lot in my
+application, for example to schedule a function that will poll the socket
+connection to run on every frame, before the rest of the other commands which
+can be executed in parallel.
+
+Another pattern is the embeding of multiple `Model`s in the root model of the
+program. On each `Update`, the root model will dispatch the message to it's 
+child models if needed. The main model is defined in the `model/model.go` file,
+and it contains the following custom models:
+
+- `ExecModel`: the model for the "Exec" tab 
+- `HideModel`: the model for the "Hide/Lock" tab
+- `DownloadModel`: the model for the "Download" tab
+- `UploadModel`: the model for the "Upload" tab
+- `PasswordModel`: the model displayed when the rootkit is locked
+- `LogsModel`: The model always displayed on the right window
+
+Some pre-defined models from the `Bubbles` library are also used by the main
+model and its children, notably `textinput`, `filepicker`, `spinner` and
+`viewport`. The main model keeps track of which tab is currently focused to
+know where to dispatch the messages, and which `View` method to call to render
+the main pane's content.
+
+
 #### Concurrency and socket access
 
-one read every tick from main thread, dumps strings in channel,
-jobs wait on channel without issues, i love channel i love go
+As I mentionned in the previous part, the application has multiple components which 
+run asynchronously, as it is a very common practice to dispatch multiple commands
+from the same model update. The models of the four tabs all need to read and write 
+to the socket connection in order work, but this connection has to be kept unique,
+and there can only be one thread listening on it at a time.
+
+To solve this problem, I decided that the socket access would be exclusive to the 
+main model of the application. It will keep state about the connection's status,
+and dispatch a command to listen and accept connection (`listenAndAcceptCmd`) on
+every tick when not connected to the rootkit.
+When connected, a command to listen on the socket will be dispatched: the 
+`readSocketCmd`.
+
+```go
+// Main model's update method:
+switch msg := msg.(type) {
+case ConnectionUpdateMsg:
+    m.server.ConnState = server.ConnectionStatus(msg)
+    if m.server.ConnState == server.Disconnected {
+        m.server.Sock = nil
+        // Starts a thread which will listen for connections:
+        return m, m.listenAndAcceptCmd() 
+    } else if m.server.ConnState == server.Connected {
+        // Starts a thread that will permanently attempt to read on the socket:
+        return m, tea.Sequence(m.setHiddenLocked, m.readSocketCmd())
+    }
+
+// And a lot more...
+}
+```
+
+This command will only exit when an error occurs while reading, and emit the
+`ConnectionUpdateMsg` with the `Disconnected` status, so we know to start
+waiting for connections again. As you can see, it is scheduled to run after
+another command: `setHiddenLocked`. When a connection is established, the
+rootkit will always send two bytes to the attacking program, representing
+wether it is hidden and wether it is locked. The first thing the attacking
+program does is reading these two bytes to set the correct statuses on it's
+side, and only then it will start the `readSocketCmd` thread.
+
+So now you may be wondering how do the other models interact with the socket at
+all if it is exclusive to the main thread? The answer is a shared `channel`. If
+you're not familiar with Go's channels, I highly encourage you to read the
+following resources:
+
+- go tour
+- go by example
+- article
+
+They allow multiple threads to communicate asynchronously and share data
+without race conditions, and without having to deal with mutexes or condition
+variables. All models hold a reference to this channel, and when triggered,
+their respective commands will write some payload to the socket, set the 
+shared `isLoading` boolean to true, and then start listening for the rootkit's
+response on the channel in a loop. Only when the command has finished listening
+(or timed out) and thus exited the loop will the `isLoading` flag be flipped
+back to false. While it is true, no other thread can start a job listening
+on the channel.
+
+In all my custom submodels, the first write to the socket is separated from the
+listening part in a different method, and the writing one will be scheduled
+first by the `Update` method thanks to the `tea.Sequence` command. This is 
+because the rootkit could send an error message that would instantly cancel
+the operation, or something could go wrong on the frontend side as well, for
+example with the download feature which will need to create a file on disk.
+
+The `isLoading` flag does not need to be protected by a mutex despite being
+accessed by multiple threads, because on every tick, a command will be
+dispatched to only a single child model: the one currently in focus. The user
+would need to be able to start an operation in a tab, switch tabs and start
+another operation in a single frame, which is impossible since each message is
+handled in a separate `Update` call.
+
+### Communication conventions
+
+I tried to do things as simply as I could for the communication part between
+the two components. I didn't want to create my own network protocol for this
+project, although I should have if I wanted a more robust framework for
+advanced features.
+
+#### Opcodes
+
+Each command the rootkit responds to is simply assigned to
+a numeric opcode, which you can find in the `commands.c` and `commands.h` files:
+
+```c
+// map each command type to it's callback
+static cmd_callback cmd_callbacks[] = {
+    [CMD_EXEC_SYNC] = do_exec_sync, //
+    [CMD_EXEC_ASYNC] = do_exec_async, //
+    [CMD_HIDE] = do_hide, //
+    [CMD_UPLOAD] = do_upload, //
+    [CMD_DOWNLOAD] = do_download, //
+    [CMD_UNLOCK] = do_unlock,
+    [CMD_LOCK] = do_lock,
+};
+```
+
+The attacking program will just send the opcode, followed by a space and then 
+the eventual arguments to the command. Here are a few examples:
+
+```
+# Run `whoami`:
+0 whoami
+
+# Download /etc/shadow:
+4 /etc/shadow
+
+# Toggle the hooks (no args):
+2
+```
+
+As mentionned previously, the `cmd_build` command is in charge of parsing these
+payloads.
+
+#### Magic bytes
+
+After exexuting, the rootkit will send a simple status message for
+commands such as hiding or locking, or write potentially long amounts of data
+in the case of exec or download. They will be split in chunks of 1024 bytes,
+and the TCP protocol ensures their ordering. To indicate the end of the data
+transmission, magic byte sequences are used. There are three of them defined as
+a convention in both the programs:
+
+- `OK_BYTES`: indicates that an operation can proceed
+- `KO_BYTES`: indicates that an operation should be canceled
+- `DONE_BYTES`: indicates that a data transmission ended
+
+The first two are used by the rootkit to indicate that a file asked for 
+downloading was found and opened, or that a file to be uploaded has been
+created.
+
+Here is a flowchart for the _Download_ command's execution flow:
+
+![download flow](./img/download_flow.png) 
+
+
+And here is a flowchart for the Upload command's execution flow:
+
+![upload flow](./img/upload_flow.png) 
+
+#### Password handling
+
+To avoid storing the password in clear text in the rootkit, it is stored as a 
+hashed version with a very advanced, post-quantum ready algorithm: __base64__!
