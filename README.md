@@ -3,6 +3,8 @@
 Educational rootkit developed for EPITA's SYS2 course. For a full user manual,
 view [user-manual.pdf](user-manual.pdf)
 
+![](https://github.com/Nvim/epirootkit/blob/master/img/exec_tab.png)
+
 ## Overview
 
 This project is composed of a Linux kernel module rootkit, and of a
